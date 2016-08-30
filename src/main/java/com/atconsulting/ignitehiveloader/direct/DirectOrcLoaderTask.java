@@ -31,17 +31,22 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
     /** Buffer size. */
     private final int bufSize;
 
+    /** Affinity mode flag. */
+    private final boolean affMode;
+
     /**
      * Constructor.
      *
      * @param pathStr Path to ORC files.
      * @param cacheName Cache name.
      * @param bufSize Buffer size.
+     * @param affMode Affinity mode flag.
      */
-    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize) {
+    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, boolean affMode) {
         this.pathStr = pathStr;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
+        this.affMode = affMode;
     }
 
     /** {@inheritDoc} */
@@ -50,24 +55,37 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
         List<ClusterNode> nodes, @Nullable String arg) throws IgniteException {
         Map<ComputeJob, ClusterNode> jobs = new HashMap<>();
 
-        Map<ClusterNode, Integer> nodeCtrs = new HashMap<>();
-
-        for (ClusterNode node : nodes)
-            nodeCtrs.put(node, 0);
-
         Path path = new Path(pathStr);
 
         FileSystem fs = DirectOrcLoaderUtils.fileSystem(path);
 
         FileStatus[] files = DirectOrcLoaderUtils.enumerateFiles(fs, path);
 
-        for (FileStatus file : files) {
-            ClusterNode node = nodeForFile(fs, file, nodes, nodeCtrs);
-            ComputeJob job = jobForFile(file);
+        if (affMode) {
+            // Every node will process every file, but will load only primary keys.
+            for (FileStatus file : files) {
+                for (ClusterNode node : nodes) {
+                    ComputeJob job = jobForFile(file);
 
-            jobs.put(job, node);
+                    jobs.put(job, node);
+                }
+            }
+        }
+        else {
+            Map<ClusterNode, Integer> nodeCtrs = new HashMap<>();
 
-            nodeCtrs.put(node, nodeCtrs.get(node) + 1);
+            for (ClusterNode node : nodes)
+                nodeCtrs.put(node, 0);
+
+            for (FileStatus file : files) {
+                ClusterNode node = nodeForFile(fs, file, nodes, nodeCtrs);
+
+                ComputeJob job = jobForFile(file);
+
+                jobs.put(job, node);
+
+                nodeCtrs.put(node, nodeCtrs.get(node) + 1);
+            }
         }
 
         return jobs;
@@ -191,6 +209,6 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @return Job.
      */
     private DirectOrcLoaderJob jobForFile(FileStatus file) {
-        return new DirectOrcLoaderJob(file.getPath().toString(), cacheName, bufSize);
+        return new DirectOrcLoaderJob(file.getPath().toString(), cacheName, bufSize, affMode);
     }
 }

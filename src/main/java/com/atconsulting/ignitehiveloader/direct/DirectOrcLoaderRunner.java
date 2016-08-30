@@ -21,6 +21,9 @@ public class DirectOrcLoaderRunner {
     /** Buffer size. */
     private static final String PROP_BUF_SIZE = "ignite.orc.buf_size";
 
+    /** Affinity mode flag. */
+    private static final String PROP_AFF_MODE = "ignite.orc.affinity_mode";
+
     /**
      * Entry point.
      */
@@ -39,6 +42,8 @@ public class DirectOrcLoaderRunner {
 
         int bufSize = Integer.getInteger(PROP_BUF_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
 
+        boolean affMode = Boolean.getBoolean(PROP_AFF_MODE);
+
         clearCache(cfgPath, cacheName);
 
         System.out.println(">>> Starting ORC load task [path=" + path + ", cfgPath=" + cfgPath +
@@ -51,7 +56,7 @@ public class DirectOrcLoaderRunner {
 
             long startTime = System.nanoTime();
 
-            int rows = compute.execute(new DirectOrcLoaderTask(path, cacheName, bufSize), null);
+            int rows = compute.execute(new DirectOrcLoaderTask(path, cacheName, bufSize, affMode), null);
 
             long dur = (System.nanoTime() - startTime) / 1_000_000;
 

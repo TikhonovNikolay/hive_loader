@@ -8,6 +8,8 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteDataStreamer;
 import org.apache.ignite.IgniteException;
+import org.apache.ignite.cache.affinity.Affinity;
+import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.compute.ComputeJob;
 import org.apache.ignite.resources.IgniteInstanceResource;
 
@@ -28,6 +30,9 @@ public class DirectOrcLoaderJob implements ComputeJob {
     /** Buffer size. */
     private int bufSize;
 
+    /** Affinity mode flag. */
+    private boolean affMode;
+
     /**
      * Constructor.
      */
@@ -42,10 +47,11 @@ public class DirectOrcLoaderJob implements ComputeJob {
      * @param cacheName Cache name.
      * @param bufSize Buffer size.
      */
-    public DirectOrcLoaderJob(String path, String cacheName, int bufSize) {
+    public DirectOrcLoaderJob(String path, String cacheName, int bufSize, boolean affMode) {
         this.path = path;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
+        this.affMode = affMode;
     }
 
     /** {@inheritDoc} */
@@ -55,6 +61,10 @@ public class DirectOrcLoaderJob implements ComputeJob {
         Reader reader = DirectOrcLoaderUtils.readerForPath(path);
 
         StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
+
+        ClusterNode locNode = ignite.cluster().localNode();
+
+        Affinity<CHA.Key> aff = ignite.affinity(cacheName);
 
         try (IgniteDataStreamer<CHA.Key, CHA> streamer = ignite.dataStreamer(cacheName)) {
             streamer.perNodeBufferSize(bufSize);
@@ -68,6 +78,10 @@ public class DirectOrcLoaderJob implements ComputeJob {
                     row = (OrcStruct)rows.next(row);
 
                     CHA.Key key = DirectOrcLoaderUtils.structToKey(row, inspector);
+
+                    if (affMode && !aff.isPrimary(locNode, key))
+                        continue;
+
                     CHA val = DirectOrcLoaderUtils.structToValue(row, inspector);
 
                     streamer.addData(key, val);
