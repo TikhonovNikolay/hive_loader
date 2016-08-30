@@ -47,4 +47,4 @@ ${HADOOP_HOME}/bin/yarn jar target/ignite-hive-loader-1.0.0-SNAPSHOT.jar com.atc
 -Dignite-client-config-path=${ignite_config} \
 -Dignite-cache-name=${cache_name} \
  "${@}" /tmp/ignite-hive-loader-out
-
+   
