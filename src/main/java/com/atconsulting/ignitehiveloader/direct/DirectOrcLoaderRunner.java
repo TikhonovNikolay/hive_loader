@@ -47,7 +47,7 @@ public class DirectOrcLoaderRunner {
         clearCache(cfgPath, cacheName);
 
         System.out.println(">>> Starting ORC load task [path=" + path + ", cfgPath=" + cfgPath +
-            ", cacheName=" + cacheName + ", bufSize=" + bufSize + ']');
+            ", cacheName=" + cacheName + ", bufSize=" + bufSize + ", affMode=" + affMode + ']');
 
         Ignition.setClientMode(true);
 
