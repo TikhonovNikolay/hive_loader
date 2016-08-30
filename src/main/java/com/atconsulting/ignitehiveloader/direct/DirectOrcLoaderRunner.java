@@ -39,6 +39,8 @@ public class DirectOrcLoaderRunner {
 
         int bufSize = Integer.getInteger(PROP_BUF_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
 
+        clearCache(cfgPath, cacheName);
+
         System.out.println(">>> Starting ORC load task [path=" + path + ", cfgPath=" + cfgPath +
             ", cacheName=" + cacheName + ", bufSize=" + bufSize + ']');
 
@@ -51,9 +53,30 @@ public class DirectOrcLoaderRunner {
 
             int rows = compute.execute(new DirectOrcLoaderTask(path, cacheName, bufSize), null);
 
-            long dur = System.nanoTime() - startTime;
+            long dur = (System.nanoTime() - startTime) / 1_000_000;
 
             System.out.println(">>> Finished ORC load task [dur=" + dur + ", rows=" + rows + ']');
         }
+    }
+
+    /**
+     * Clear cache before running task.
+     *
+     * @param cfgPath Path to XML config.
+     * @param cacheName Cache name.
+     */
+    private static void clearCache(String cfgPath, String cacheName) {
+        Ignition.setClientMode(true);
+
+        try {
+            try (Ignite ignite = Ignition.start(cfgPath)) {
+                ignite.cache(cacheName).clear();
+            }
+        }
+        finally {
+            Ignition.setClientMode(false);
+        }
+
+        System.out.println(">>> Cleared target cache: " + cacheName);
     }
 }
