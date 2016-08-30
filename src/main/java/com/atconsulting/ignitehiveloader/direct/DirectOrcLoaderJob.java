@@ -58,10 +58,11 @@ public class DirectOrcLoaderJob implements ComputeJob {
         this.affMode = affMode;
     }
 
-
-
     /** {@inheritDoc} */
     @Override public Object execute() throws IgniteException {
+        System.out.println(">>> Starting OR job [file=" + path + ", cacheName=" + cacheName +
+            ", bufSize=" + bufSize + ", affMode=" + affMode + ']');
+
         int rowCnt = 0;
 
         Reader reader = DirectOrcLoaderUtils.readerForPath(path);
