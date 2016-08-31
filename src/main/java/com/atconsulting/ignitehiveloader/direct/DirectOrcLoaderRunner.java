@@ -21,6 +21,9 @@ public class DirectOrcLoaderRunner {
     /** Buffer size. */
     private static final String PROP_BUF_SIZE = "ignite.orc.buf_size";
 
+    /** Concurrency level. */
+    private static final String PROP_CONCURRENCY = "ignite.orc.concurrency";
+
     /** Affinity mode flag. */
     private static final String PROP_AFF_MODE = "ignite.orc.affinity_mode";
 
@@ -44,6 +47,8 @@ public class DirectOrcLoaderRunner {
 
         boolean affMode = Boolean.getBoolean(PROP_AFF_MODE);
 
+        int concurrency = Integer.getInteger(PROP_CONCURRENCY, 0);
+
         clearCache(cfgPath, cacheName);
 
         System.out.println(">>> Starting ORC load task [path=" + path + ", cfgPath=" + cfgPath +
@@ -56,7 +61,7 @@ public class DirectOrcLoaderRunner {
 
             long startTime = System.nanoTime();
 
-            int rows = compute.execute(new DirectOrcLoaderTask(path, cacheName, bufSize, affMode), null);
+            int rows = compute.execute(new DirectOrcLoaderTask(path, cacheName, bufSize, affMode, concurrency), null);
 
             long dur = (System.nanoTime() - startTime) / 1_000_000;
 
