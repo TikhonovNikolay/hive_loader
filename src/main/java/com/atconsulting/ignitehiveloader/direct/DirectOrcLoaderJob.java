@@ -12,6 +12,7 @@ import org.apache.ignite.IgniteException;
 import org.apache.ignite.cache.affinity.Affinity;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.compute.ComputeJob;
+import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.lang.IgniteFuture;
 import org.apache.ignite.lang.IgniteInClosure;
@@ -26,6 +27,7 @@ import java.util.Map;
 public class DirectOrcLoaderJob implements ComputeJob {
     /** Injected Ignite instance. */
     @IgniteInstanceResource
+    @GridToStringExclude
     private Ignite ignite;
 
     /** Path to file. */
