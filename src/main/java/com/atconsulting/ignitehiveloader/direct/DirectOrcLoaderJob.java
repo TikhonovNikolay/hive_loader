@@ -172,7 +172,7 @@ public class DirectOrcLoaderJob implements ComputeJob {
 
         ClusterNode locNode = ignite.cluster().localNode();
 
-        Affinity<CHA.Key> aff = ignite.affinity(cacheName);
+        Affinity<Long> aff = ignite.affinity(cacheName);
 
         try {
             RecordReader rows = reader.rows();
@@ -184,7 +184,7 @@ public class DirectOrcLoaderJob implements ComputeJob {
 
                 CHA.Key key = DirectOrcLoaderUtils.structToKey(row, inspector);
 
-                if (!aff.isPrimary(locNode, key))
+                if (!aff.isPrimary(locNode, key.getSubscriberId()))
                     continue;
 
                 CHA val = DirectOrcLoaderUtils.structToValue(row, inspector);
