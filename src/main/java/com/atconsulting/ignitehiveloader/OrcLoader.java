@@ -24,9 +24,8 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.ignite.Ignite;
-import org.apache.ignite.IgniteCache;
+import org.apache.ignite.IgniteDataStreamer;
 import org.apache.ignite.Ignition;
 
 /**
@@ -40,67 +39,89 @@ public class OrcLoader {
      * @throws Exception On error.
      */
     public static void main(String[] args) throws Exception {
+        // Get job parameters.
+        String input = System.getProperty(OrcLoaderProperties.PROP_INPUT);
+
+        if (input == null)
+            throw new IllegalArgumentException("Input path is not specified " +
+                "(set " + OrcLoaderProperties.PROP_INPUT + " property).");
+
+        String output = System.getProperty(OrcLoaderProperties.PROP_OUTPUT);
+
+        if (output == null)
+            throw new IllegalArgumentException("Output path is not specified " +
+                "(set " + OrcLoaderProperties.PROP_OUTPUT + " property).");
+
+        String cfgPath = System.getProperty(OrcLoaderProperties.PROP_CONFIG_PATH);
+
+        if (cfgPath == null)
+            throw new IllegalArgumentException("Path to Ignite XML configuration is not specified " +
+                "(set " + OrcLoaderProperties.PROP_CONFIG_PATH + " property).");
+
+        String cacheName = System.getProperty(OrcLoaderProperties.PROP_CACHE_NAME);
+
+        boolean clearCache = Boolean.getBoolean(OrcLoaderProperties.PROP_CLEAR_CACHE);
+
+        int bufSize = Integer.getInteger(OrcLoaderProperties.PROP_BUFFER_SIZE,
+            IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
+
+        if (bufSize <= 0)
+            throw new IllegalArgumentException("Buffer size must be positive: " + bufSize);
+
+        int concurrency = Integer.getInteger(OrcLoaderProperties.PROP_CONCURRENCY, 1);
+
+        if (concurrency <= 0)
+            throw new IllegalArgumentException("Concurrency must be positive: " + concurrency);
+
+        boolean filterCurDay = Boolean.getBoolean(OrcLoaderProperties.PROP_FILTER_CURRENT_DAY);
+
+        // Clear cache if needed.
+        if (clearCache)
+            clearCache(cfgPath, cacheName);
+
+        // Prepare configuration.
         final Configuration conf = new Configuration();
 
-        String[] otherArgs = new GenericOptionsParser(conf, args).getRemainingArgs();
+        conf.set(OrcLoaderProperties.PROP_CONFIG_PATH, cfgPath);
+        conf.set(OrcLoaderProperties.PROP_CACHE_NAME, cacheName);
+        conf.setInt(OrcLoaderProperties.PROP_BUFFER_SIZE, bufSize);
+        conf.setInt(OrcLoaderProperties.PROP_CONCURRENCY, concurrency);
+        conf.setBoolean(OrcLoaderProperties.PROP_FILTER_CURRENT_DAY, filterCurDay);
 
-        if (otherArgs.length < 1) {
-            System.err.println("Parameters: <in> [<in>...] <out>");
-
-            System.exit(2);
-        }
-
-        clearCache(conf);
-
+        // Prepare job.
         final Job job = Job.getInstance(conf, "Ignite ORC Loader");
 
         job.setJarByClass(OrcLoader.class);
-
         job.setInputFormatClass(OrcNewInputFormat.class);
-
         job.setMapperClass(OrcLoaderMapper.class);
-
         job.setOutputKeyClass(NullWritable.class);
         job.setOutputValueClass(NullWritable.class);
 
-        for (int i = 0; i < otherArgs.length - 1; ++i)
-            FileInputFormat.addInputPath(job, new Path(otherArgs[i]));
+        FileInputFormat.setInputPaths(job, new Path(input));
+        FileOutputFormat.setOutputPath(job, new Path(output));
 
-        FileOutputFormat.setOutputPath(job, new Path(otherArgs[otherArgs.length - 1]));
+        // Submit the job.
+        boolean res = job.waitForCompletion(true);
 
-        // Submit the job and wait it to complete:
-        boolean ok = job.waitForCompletion(true);
-
-        System.exit(ok ? 0 : 1);
+        System.exit(res ? 0 : 1);
     }
 
     /**
      * Clear cache using provided configuration.
      *
-     * @param cfg Configuration.
+     * @param cfgPath Path to Ignite XML configuration file.
+     * @param cacheName Cache name.
      */
-    private static void clearCache(Configuration cfg) {
-        String cfgPath = cfg.get(OrcLoaderProperties.PROP_CONFIG_PATH);
-
-        if (cfgPath == null)
-            throw new IllegalStateException("Config property '" + OrcLoaderProperties.PROP_CONFIG_PATH +
-                "' must be defined.");
+    private static void clearCache(String cfgPath, String cacheName) {
+        boolean oldCliMode = Ignition.isClientMode();
 
         Ignition.setClientMode(true);
 
-        Ignite ignite = Ignition.start(cfgPath);
-
-        // Prepare streamer.
-        String cacheName = cfg.get(OrcLoaderProperties.PROP_CACHE_NAME);
-
-        if (cacheName == null)
-            throw new IllegalStateException("Config property '" + OrcLoaderProperties.PROP_CACHE_NAME +
-                "' must be defined.");
-
-        IgniteCache cache = ignite.getOrCreateCache(cacheName);
-
-        cache.clear();
-
-        ignite.close();
+        try (Ignite ignite = Ignition.start(cfgPath)) {
+            ignite.cache(cacheName).clear();
+        }
+        finally {
+            Ignition.setClientMode(oldCliMode);
+        }
     }
 }

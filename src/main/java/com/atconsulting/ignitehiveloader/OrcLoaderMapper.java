@@ -1,22 +1,25 @@
 package com.atconsulting.ignitehiveloader;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.io.orc.OrcStruct;
-import org.apache.hadoop.hive.serde2.io.TimestampWritable;
-import org.apache.hadoop.hive.serde2.objectinspector.StructField;
-import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.IgniteDataStreamer;
-import org.apache.ignite.IgniteIllegalStateException;
+import org.apache.ignite.IgniteException;
 import org.apache.ignite.Ignition;
-import org.apache.ignite.lang.IgniteBiTuple;
+import org.apache.ignite.cache.affinity.Affinity;
+import org.apache.ignite.cluster.ClusterNode;
+import org.apache.ignite.lang.IgniteFuture;
+import org.apache.ignite.lang.IgniteInClosure;
 
 import java.io.IOException;
-import java.text.ParseException;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * ORC loader mapper.
@@ -43,11 +46,41 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
     /** Counter: streamer add duration.. */
     private static final String CTR_ADD_DUR = "dur.add";
 
+    /** Mutex for synchronization. */
+    private final Object mux = new Object();
+
+    /** Per-node buffers. */
+    private final Map<UUID, Map<CHA.Key, CHA>> bufPerNodeId = new HashMap<>();
+
+    /** Current date. */
+    private final Date curDate = new Date();
+
+    /** Current year. */
+    private final int curYear = curDate.getYear();
+
+    /** Current month. */
+    private final int curMonth = curDate.getMonth();
+
+    /** Current day. */
+    private final int curDay = curDate.getDay();
+
     /** Ignite instance. */
     private Ignite ignite;
 
-    /** Streamer.*/
-    private IgniteDataStreamer<CHA.Key, CHA> streamer;
+    /** Ignite cache. */
+    private IgniteCache<CHA.Key, CHA> cache;
+
+    /** Affinity. */
+    private Affinity<Long> aff;
+
+    /** Buffer size. */
+    private int bufSize;
+
+    /** Per-node concurrency. */
+    private int concurrency;
+
+    /** Whether only current day should be loaded. */
+    private boolean filterCurDay;
 
     /** Unique counter ID. */
     private String ctrId;
@@ -67,6 +100,12 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
     /** Counter: duration of streamer add operations. */
     private long ctrAddDur;
 
+    /** Amount of active operations. */
+    private int activeOps;
+
+    /** Error ocurred during put. */
+    private Exception putErr;
+
     /** {@inheritDoc} */
     @SuppressWarnings("unchecked")
     @Override protected void setup(Context context) throws IOException, InterruptedException {
@@ -74,76 +113,80 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
 
         startTime = System.currentTimeMillis();
 
-        String cfgPath = context.getConfiguration().get(OrcLoaderProperties.PROP_CONFIG_PATH);
+        // Check config parameters.
+        Configuration conf = context.getConfiguration();
+
+        String cfgPath = conf.get(OrcLoaderProperties.PROP_CONFIG_PATH);
 
         if (cfgPath == null)
-            throw new IllegalStateException("Config property '" + OrcLoaderProperties.PROP_CONFIG_PATH +
-                "' must be defined.");
+            throw new IllegalArgumentException("Path to Ignite XML configuration is not specified " +
+                "(set " + OrcLoaderProperties.PROP_CONFIG_PATH + " property).");
 
-        try {
-            ignite = Ignition.ignite();
-        }
-        catch (IgniteIllegalStateException ignore) {
-            Ignition.setClientMode(true);
+        String cacheName = conf.get(OrcLoaderProperties.PROP_CACHE_NAME);
 
-            ignite = Ignition.start(cfgPath);
-        }
+        bufSize = conf.getInt(OrcLoaderProperties.PROP_BUFFER_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
 
-        // Prepare streamer.
-        String cacheName = context.getConfiguration().get(OrcLoaderProperties.PROP_CACHE_NAME);
+        if (bufSize <= 0)
+            throw new IllegalArgumentException("Buffer size cannot be negative: " + bufSize);
 
-        if (cacheName == null)
-            throw new IllegalStateException("Config property '" + OrcLoaderProperties.PROP_CACHE_NAME +
-                "' must be defined.");
+        concurrency = conf.getInt(OrcLoaderProperties.PROP_CONCURRENCY, 1);
 
-        IgniteCache cache = ignite.getOrCreateCache(cacheName);
+        if (concurrency <= 0)
+            throw new IllegalArgumentException("Concurrency must be positive: " + concurrency);
 
-        if (cache == null)
-            throw new IllegalStateException("Unable to get cache '" + cacheName + "'.");
+        filterCurDay = conf.getBoolean(OrcLoaderProperties.PROP_FILTER_CURRENT_DAY, false);
 
-        int bufSize = context.getConfiguration().getInt(
-            OrcLoaderProperties.PROP_STREAMER_BUFFER, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
+        // Start Ignite node in client mode and get cache.
+        Ignition.setClientMode(true);
 
-        streamer = ignite.dataStreamer(cacheName);
+        ignite = Ignition.start(cfgPath);
 
-        streamer.perNodeBufferSize(bufSize);
+        IgniteCache<CHA.Key, CHA> syncCache = ignite.cache(cacheName);
+
+        cache = syncCache.withAsync();
+
+        aff = ignite.affinity(cacheName);
 
         ctrSetupDur = System.nanoTime() - startTime;
     }
 
     /** {@inheritDoc} */
-    @Override public void map(NullWritable key, OrcStruct orcStruct, Context context) throws IOException,
+    @Override public void map(NullWritable key, OrcStruct struct, Context context) throws IOException,
         InterruptedException {
         long mapStartTime = System.nanoTime();
 
-        Map.Entry<CHA.Key, CHA> pair;
-
-        try {
-            pair = createCha(orcStruct);
-        }
-        catch (ParseException pe) {
-            throw new IOException(pe);
-        }
+        CHA.Key chaKey = OrcLoaderUtils.structToKey(struct, OrcLoaderUtils.inspector());
+        CHA chaVal = OrcLoaderUtils.structToValue(struct, OrcLoaderUtils.inspector());
 
         long addStartTime = System.nanoTime();
 
-        streamer.addData(pair);
+        boolean added = addData(chaKey, chaVal);
 
         long mapStopTime = System.nanoTime();
 
         // Update counters.
         ctrAddDur += mapStopTime - addStartTime;
         ctrMapDur += mapStopTime - mapStartTime;
-        ctrMapCnt++;
+
+        if (added)
+            ctrMapCnt++;
     }
 
     /** {@inheritDoc} */
     @Override protected void cleanup(Context ctx) throws IOException, InterruptedException {
         long cleanupStartTime = System.nanoTime();
 
-        if (streamer != null) {
-            streamer.flush();
-            streamer.close();
+        // Send remaining buffers.
+        for (Map<CHA.Key, CHA> buf : bufPerNodeId.values())
+            sendBuffer(buf);
+
+        // Await all cache ops to complete.
+        synchronized (mux) {
+            while (activeOps > 0)
+                mux.wait();
+
+            if (putErr != null)
+                throw new IgniteException("An error ocurred during put operation.", putErr);
         }
 
         ctrAddDur += System.nanoTime() - cleanupStartTime;
@@ -163,59 +206,103 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
     }
 
     /**
-     * Create CHA structure.
+     * Add data to cache.
      *
-     * @param struct Structure.
-     * @return Pair.
-     * @throws ParseException If failed.
+     * @param key Key.
+     * @param val Value.
+     * @return {@code True} if data was put to cache, {@code false} if it was filtere.
      */
-    @SuppressWarnings("ConstantConditions")
-    private Map.Entry<CHA.Key, CHA> createCha(OrcStruct struct) throws ParseException {
-        CHA.Key key = new CHA.Key();
+    private boolean addData(CHA.Key key, CHA val) {
+        if (filterCurDay && !currentDay(val.getPutTimestamp()))
+            return false;
 
-        CHA cha = new CHA();
+        // Get affinity node.
+        ClusterNode node = aff.mapKeyToNode(key.getSubscriberId());
 
-        for (final StructField field : OrcLoaderUtils.inspector().getAllStructFieldRefs()) {
-            final Object data = OrcLoaderUtils.inspector().getStructFieldData(struct, field);
+        if (node == null)
+            throw new IllegalStateException("Cannot get primary node for key (all data nodes left the cluster).");
 
-            OrcCHAField field0 = OrcCHAField.valueOf(field.getFieldName());
+        UUID nodeId = node.id();
 
-            switch (field0) {
-                case ACTIVITY_TYPE:
-                    cha.setActivityType(data.toString());
+        // Put data to buffer.
+        Map<CHA.Key, CHA> buf = bufPerNodeId.get(nodeId);
 
-                    break;
+        if (buf == null) {
+            buf = new HashMap<>(bufSize, 1.0f);
 
-                case BALANCES_INFO:
-                    cha.setBalancesInfo(data.toString());
-
-                    break;
-
-                case START_CALL_DATE_TIME:
-                    key.setStartCallDateTime(((TimestampWritable)data).getTimestamp());
-
-                    break;
-
-                case SUBSCRIBER_ID:
-                    key.setSubscriberId(((LongWritable)data).get());
-
-                    break;
-
-                case USAGE_AMOUNT:
-                    cha.setUsageAmount(((LongWritable)data).get());
-
-                    break;
-
-                default:
-                    throw new Error("Unknown type: " + field0);
-            }
-
-            // These fields are not present in the table:
-            cha.setLoadDuration(-1);
-            cha.setPutTimestamp(null);
+            bufPerNodeId.put(nodeId, buf);
         }
 
-        return new IgniteBiTuple<>(key, cha);
+        buf.put(key, val);
+
+        // Schedule send if buffer is full.
+        if (buf.size() == bufSize) {
+            sendBuffer(buf);
+
+            bufPerNodeId.remove(nodeId);
+        }
+
+        return true;
+    }
+
+    /**
+     * Send buffer to servers.
+     *
+     * @param buf Buffer.
+     */
+    private void sendBuffer(Map<CHA.Key, CHA> buf) {
+        // Obtain permit.
+        try {
+            synchronized (mux) {
+                while (activeOps >= concurrency)
+                    mux.wait();
+
+                activeOps++;
+            }
+        }
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+
+            throw new IgniteException("Failed to wait for asynchronous operation permit.");
+        }
+
+        // Perform put.
+        cache.putAll(buf);
+
+        IgniteFuture<Void> fut = cache.future();
+
+        // Decrease parallel ops count when put is completed.
+        fut.listen(new IgniteInClosure<IgniteFuture>() {
+            @Override public void apply(IgniteFuture fut0) {
+                Exception err = null;
+
+                try {
+                    fut0.get();
+                }
+                catch (Exception e) {
+                    err = e;
+                }
+
+                synchronized (mux) {
+                    if (err != null && putErr == null)
+                        putErr = err;
+
+                    activeOps--;
+
+                    mux.notifyAll();
+                }
+            }
+        });
+    }
+
+    /**
+     * Check if passed date represents current day.
+     *
+     * @param date Date.
+     * @return {@code True} if this is current date.
+     */
+    private boolean currentDay(Date date) {
+        return date.getDay() == curDay && date.getMonth() == curMonth && date.getYear() == curYear;
     }
 
     /**

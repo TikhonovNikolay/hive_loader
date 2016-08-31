@@ -1,6 +1,7 @@
 package com.atconsulting.ignitehiveloader.direct;
 
 import com.atconsulting.ignitehiveloader.CHA;
+import com.atconsulting.ignitehiveloader.OrcLoaderUtils;
 import org.apache.hadoop.hive.ql.io.orc.OrcStruct;
 import org.apache.hadoop.hive.ql.io.orc.Reader;
 import org.apache.hadoop.hive.ql.io.orc.RecordReader;
@@ -81,12 +82,7 @@ public class DirectOrcLoaderJob implements ComputeJob {
 
         switch (mode) {
             case LOCAL_FILES:
-                cnt = readAndLoad(reader, inspector, false);
-
-                break;
-
-            case LOCAL_FILES_FORCE_PRIMARY:
-                cnt = readAndLoad(reader, inspector, true);
+                cnt = readAndLoad(reader, inspector);
 
                 break;
 
@@ -109,21 +105,9 @@ public class DirectOrcLoaderJob implements ComputeJob {
      *
      * @param reader Reader.
      * @param inspector Inspector.
-     * @param forcePrimary Whether to force primary keys.
      * @return Amount of loaded key-value pairs.
      */
-    private long readAndLoad(Reader reader, StructObjectInspector inspector, boolean forcePrimary) {
-        int affKey = 0;
-
-        if (forcePrimary) {
-            Affinity<Integer> aff = ignite.affinity(cacheName);
-
-            ClusterNode locNode = ignite.cluster().localNode();
-
-            while (!aff.isPrimary(locNode, affKey))
-                affKey++;
-        }
-
+    private long readAndLoad(Reader reader, StructObjectInspector inspector) {
         long cnt = 0;
 
         try (IgniteDataStreamer<Object, CHA> streamer = ignite.dataStreamer(cacheName)) {
@@ -137,10 +121,8 @@ public class DirectOrcLoaderJob implements ComputeJob {
                 while (rows.hasNext()) {
                     row = (OrcStruct) rows.next(row);
 
-                    Object key = forcePrimary ? DirectOrcLoaderUtils.structToKey(row, inspector, affKey) :
-                        DirectOrcLoaderUtils.structToKey(row, inspector);
-
-                    CHA val = DirectOrcLoaderUtils.structToValue(row, inspector);
+                    Object key = OrcLoaderUtils.structToKey(row, inspector);
+                    CHA val = OrcLoaderUtils.structToValue(row, inspector);
 
                     if (!skipCache)
                         streamer.addData(key, val);
@@ -182,12 +164,12 @@ public class DirectOrcLoaderJob implements ComputeJob {
             while (rows.hasNext()) {
                 row = (OrcStruct)rows.next(row);
 
-                CHA.Key key = DirectOrcLoaderUtils.structToKey(row, inspector);
+                CHA.Key key = OrcLoaderUtils.structToKey(row, inspector);
 
                 if (!aff.isPrimary(locNode, key.getSubscriberId()))
                     continue;
 
-                CHA val = DirectOrcLoaderUtils.structToValue(row, inspector);
+                CHA val = OrcLoaderUtils.structToValue(row, inspector);
 
                 buf.put(key, val);
 
