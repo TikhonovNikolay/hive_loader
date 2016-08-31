@@ -27,6 +27,9 @@ public class DirectOrcLoaderRunner {
     /** Affinity mode flag. */
     private static final String PROP_AFF_MODE = "ignite.orc.affinity_mode";
 
+    /** Skip cache load flag. */
+    private static final String PROP_SKIP_CACHE = "ignite.orc.skip_cache";
+
     /**
      * Entry point.
      */
@@ -49,6 +52,8 @@ public class DirectOrcLoaderRunner {
 
         int concurrency = Integer.getInteger(PROP_CONCURRENCY, 0);
 
+        boolean skipCache = Boolean.getBoolean(PROP_SKIP_CACHE);
+
         clearCache(cfgPath, cacheName);
 
         System.out.println(">>> Starting ORC load task [path=" + path + ", cfgPath=" + cfgPath +
@@ -61,7 +66,8 @@ public class DirectOrcLoaderRunner {
 
             long startTime = System.nanoTime();
 
-            int rows = compute.execute(new DirectOrcLoaderTask(path, cacheName, bufSize, affMode, concurrency), null);
+            int rows = compute.execute(
+                new DirectOrcLoaderTask(path, cacheName, bufSize, affMode, concurrency, skipCache), null);
 
             long dur = (System.nanoTime() - startTime) / 1_000_000;
 

@@ -12,13 +12,13 @@ import org.apache.ignite.IgniteException;
 import org.apache.ignite.cache.affinity.Affinity;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.compute.ComputeJob;
+import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.lang.IgniteFuture;
 import org.apache.ignite.lang.IgniteInClosure;
 import org.apache.ignite.resources.IgniteInstanceResource;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Semaphore;
 
 /**
  * Ignite job to load a file into Ignite.
@@ -43,6 +43,9 @@ public class DirectOrcLoaderJob implements ComputeJob {
     /** Concurrency. */
     private int concurrency;
 
+    /** Skip cache flag. */
+    private boolean skipCache;
+
     /**
      * Constructor.
      */
@@ -58,19 +61,21 @@ public class DirectOrcLoaderJob implements ComputeJob {
      * @param bufSize Buffer size.
      * @param affMode Affinity mode.
      * @param concurrency Concurrency level.
+     * @param skipCache Skip cache flag.
      */
-    public DirectOrcLoaderJob(String path, String cacheName, int bufSize, boolean affMode, int concurrency) {
+    public DirectOrcLoaderJob(String path, String cacheName, int bufSize, boolean affMode, int concurrency,
+        boolean skipCache) {
         this.path = path;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
         this.affMode = affMode;
         this.concurrency = concurrency;
+        this.skipCache = skipCache;
     }
 
     /** {@inheritDoc} */
     @Override public Object execute() throws IgniteException {
-        System.out.println(">>> Starting OR job [file=" + path + ", cacheName=" + cacheName +
-            ", bufSize=" + bufSize + ", affMode=" + affMode + ']');
+        System.out.println(">>> Starting ORC job: " + this);
 
         int rowCnt = 0;
 
@@ -95,7 +100,8 @@ public class DirectOrcLoaderJob implements ComputeJob {
                     CHA.Key key = DirectOrcLoaderUtils.structToKey(row, inspector);
                     CHA val = DirectOrcLoaderUtils.structToValue(row, inspector);
 
-                    streamer.addData(key, val);
+                    if (!skipCache)
+                        streamer.addData(key, val);
 
                     rowCnt++;
                 }
@@ -187,6 +193,9 @@ public class DirectOrcLoaderJob implements ComputeJob {
      * @param buf Buffer.
      */
     private void loadAffinityBatch(IgniteCache<CHA.Key, CHA> cache, Map<CHA.Key, CHA> buf) {
+        if (skipCache)
+            return;
+
         if (concurrency <= 0)
             cache.putAll(buf);
         else {
@@ -241,5 +250,10 @@ public class DirectOrcLoaderJob implements ComputeJob {
     /** {@inheritDoc} */
     @Override public void cancel() {
         // No-op.
+    }
+
+    /** {@inheritDoc} */
+    @Override public String toString() {
+        return S.toString(DirectOrcLoaderJob.class, this);
     }
 }

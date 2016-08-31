@@ -10,6 +10,7 @@ import org.apache.ignite.compute.ComputeJob;
 import org.apache.ignite.compute.ComputeJobResult;
 import org.apache.ignite.compute.ComputeTaskAdapter;
 import org.apache.ignite.internal.util.typedef.F;
+import org.apache.ignite.internal.util.typedef.internal.S;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
@@ -37,6 +38,9 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
     /** Concurrency. */
     private final int concurrency;
 
+    /** Skip cache flag. */
+    private final boolean skipCache;
+
     /**
      * Constructor.
      *
@@ -45,13 +49,16 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @param bufSize Buffer size.
      * @param affMode Affinity mode flag.
      * @param concurrency Concurrency level.
+     * @param skipCache Skip cache flag.
      */
-    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, boolean affMode, int concurrency) {
+    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, boolean affMode, int concurrency,
+        boolean skipCache) {
         this.pathStr = pathStr;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
         this.affMode = affMode;
         this.concurrency = concurrency;
+        this.skipCache = skipCache;
     }
 
     /** {@inheritDoc} */
@@ -214,6 +221,11 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @return Job.
      */
     private DirectOrcLoaderJob jobForFile(FileStatus file) {
-        return new DirectOrcLoaderJob(file.getPath().toString(), cacheName, bufSize, affMode, concurrency);
+        return new DirectOrcLoaderJob(file.getPath().toString(), cacheName, bufSize, affMode, concurrency, skipCache);
+    }
+
+    /** {@inheritDoc} */
+    @Override public String toString() {
+        return S.toString(DirectOrcLoaderTask.class, this);
     }
 }
