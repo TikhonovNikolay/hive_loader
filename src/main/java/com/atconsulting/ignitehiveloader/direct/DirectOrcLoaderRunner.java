@@ -21,9 +21,6 @@ public class DirectOrcLoaderRunner {
     /** Buffer size. */
     private static final String PROP_BUF_SIZE = "ignite.orc.buf_size";
 
-    /** Concurrency level. */
-    private static final String PROP_CONCURRENCY = "ignite.orc.concurrency";
-
     /** Affinity mode flag. */
     private static final String PROP_AFF_MODE = "ignite.orc.affinity_mode";
 
@@ -50,8 +47,6 @@ public class DirectOrcLoaderRunner {
 
         boolean affMode = Boolean.getBoolean(PROP_AFF_MODE);
 
-        int concurrency = Integer.getInteger(PROP_CONCURRENCY, 0);
-
         boolean skipCache = Boolean.getBoolean(PROP_SKIP_CACHE);
 
         Ignition.setClientMode(true);
@@ -66,8 +61,7 @@ public class DirectOrcLoaderRunner {
 
             long startTime = System.nanoTime();
 
-            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, affMode, concurrency,
-                skipCache);
+            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, affMode, skipCache);
 
             int rows = compute.execute(task, null);
 

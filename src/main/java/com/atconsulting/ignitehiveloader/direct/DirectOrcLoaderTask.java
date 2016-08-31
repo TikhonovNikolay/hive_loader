@@ -35,9 +35,6 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
     /** Affinity mode flag. */
     private final boolean affMode;
 
-    /** Concurrency. */
-    private final int concurrency;
-
     /** Skip cache flag. */
     private final boolean skipCache;
 
@@ -48,16 +45,13 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @param cacheName Cache name.
      * @param bufSize Buffer size.
      * @param affMode Affinity mode flag.
-     * @param concurrency Concurrency level.
      * @param skipCache Skip cache flag.
      */
-    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, boolean affMode, int concurrency,
-        boolean skipCache) {
+    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, boolean affMode, boolean skipCache) {
         this.pathStr = pathStr;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
         this.affMode = affMode;
-        this.concurrency = concurrency;
         this.skipCache = skipCache;
     }
 
@@ -223,7 +217,7 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @return Job.
      */
     private DirectOrcLoaderJob jobForFile(FileStatus file) {
-        return new DirectOrcLoaderJob(file.getPath().toString(), cacheName, bufSize, affMode, concurrency, skipCache);
+        return new DirectOrcLoaderJob(file.getPath().toString(), cacheName, bufSize, affMode, skipCache);
     }
 
     /** {@inheritDoc} */

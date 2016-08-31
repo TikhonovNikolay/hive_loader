@@ -14,8 +14,6 @@ import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.compute.ComputeJob;
 import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.typedef.internal.S;
-import org.apache.ignite.lang.IgniteFuture;
-import org.apache.ignite.lang.IgniteInClosure;
 import org.apache.ignite.resources.IgniteInstanceResource;
 
 import java.util.HashMap;
@@ -37,9 +35,6 @@ public class DirectOrcLoaderJob implements ComputeJob {
     /** Affinity mode flag. */
     private boolean affMode;
 
-    /** Concurrency. */
-    private int concurrency;
-
     /** Skip cache flag. */
     private boolean skipCache;
 
@@ -47,14 +42,6 @@ public class DirectOrcLoaderJob implements ComputeJob {
     @IgniteInstanceResource
     @GridToStringExclude
     private Ignite ignite;
-
-    /** Current async operations. */
-    @GridToStringExclude
-    private int asyncOps;
-
-    /** Error ocurred during async execution. */
-    @GridToStringExclude
-    private Exception asyncErr;
 
     /**
      * Constructor.
@@ -70,16 +57,13 @@ public class DirectOrcLoaderJob implements ComputeJob {
      * @param cacheName Cache name.
      * @param bufSize Buffer size.
      * @param affMode Affinity mode.
-     * @param concurrency Concurrency level.
      * @param skipCache Skip cache flag.
      */
-    public DirectOrcLoaderJob(String path, String cacheName, int bufSize, boolean affMode, int concurrency,
-        boolean skipCache) {
+    public DirectOrcLoaderJob(String path, String cacheName, int bufSize, boolean affMode, boolean skipCache) {
         this.path = path;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
         this.affMode = affMode;
-        this.concurrency = concurrency;
         this.skipCache = skipCache;
     }
 
@@ -179,7 +163,8 @@ public class DirectOrcLoaderJob implements ComputeJob {
                 buf.put(key, val);
 
                 if (buf.size() == bufSize) {
-                    loadAffinityBatch(cache, buf);
+                    if (!skipCache)
+                        cache.putAll(buf);
 
                     buf = new HashMap<>(bufSize, 1.0f);
                 }
@@ -187,20 +172,9 @@ public class DirectOrcLoaderJob implements ComputeJob {
                 cnt++;
             }
 
-            if (buf.size() > 0)
-                loadAffinityBatch(cache, buf);
-
-            // Await for async ops completion.
-            try {
-                synchronized (this) {
-                    while (asyncOps > 0)
-                        wait();
-                }
-            }
-            catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-
-                throw new IgniteException("Interrupted while waiting for async ops completion!", e);
+            if (buf.size() > 0) {
+                if (!skipCache)
+                    cache.putAll(buf);
             }
         }
         catch (Exception e) {
@@ -208,66 +182,6 @@ public class DirectOrcLoaderJob implements ComputeJob {
         }
 
         return cnt;
-    }
-
-    /**
-     * Load batch in affinity mode.
-     *
-     * @param buf Buffer.
-     */
-    private void loadAffinityBatch(IgniteCache<CHA.Key, CHA> cache, Map<CHA.Key, CHA> buf) {
-        if (skipCache)
-            return;
-
-        if (concurrency <= 0)
-            cache.putAll(buf);
-        else {
-            // Increment async ops.
-            try {
-                synchronized (this) {
-                    while (asyncOps >= concurrency)
-                        wait();
-
-                    asyncOps++;
-                }
-            }
-            catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-
-                throw new IgniteException("Interrupted while waiting for execution permit!", e);
-            }
-
-            // Perform asynch put.
-            IgniteCache<CHA.Key, CHA> cacheAsync = cache.withAsync();
-
-            cacheAsync.putAll(buf);
-
-            cacheAsync.future().listen(new IgniteInClosure<IgniteFuture<Object>>() {
-                @Override public void apply(IgniteFuture<Object> fut) {
-                    IgniteException err = null;
-
-                    try {
-                        fut.get();
-                    }
-                    catch (IgniteException e) {
-                        err = e;
-                    }
-
-                    if (err != null)
-                        System.out.println(">>> Error occurred: " + err);
-
-                    // Decrement async ops.
-                    synchronized (this) {
-                        if (asyncErr == null && err != null)
-                            asyncErr = err;
-
-                        asyncOps--;
-
-                        notifyAll();
-                    }
-                }
-            });
-        }
     }
 
     /** {@inheritDoc} */
