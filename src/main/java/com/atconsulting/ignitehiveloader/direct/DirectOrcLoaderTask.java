@@ -108,9 +108,11 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
         int total = 0;
 
         for (ComputeJobResult res : ress) {
-            int rowCnt = res.getData();
+            DirectOrcLoaderJobResult res0 = res.getData();
 
-            total += rowCnt;
+            System.out.println(">>> " + res0);
+
+            total += res0.count();
         }
 
         return total;

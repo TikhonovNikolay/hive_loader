@@ -25,11 +25,6 @@ import java.util.Map;
  * Ignite job to load a file into Ignite.
  */
 public class DirectOrcLoaderJob implements ComputeJob {
-    /** Injected Ignite instance. */
-    @IgniteInstanceResource
-    @GridToStringExclude
-    private Ignite ignite;
-
     /** Path to file. */
     private String path;
 
@@ -47,6 +42,19 @@ public class DirectOrcLoaderJob implements ComputeJob {
 
     /** Skip cache flag. */
     private boolean skipCache;
+
+    /** Injected Ignite instance. */
+    @IgniteInstanceResource
+    @GridToStringExclude
+    private Ignite ignite;
+
+    /** Current async operations. */
+    @GridToStringExclude
+    private int asyncOps;
+
+    /** Error ocurred during async execution. */
+    @GridToStringExclude
+    private Exception asyncErr;
 
     /**
      * Constructor.
@@ -79,14 +87,33 @@ public class DirectOrcLoaderJob implements ComputeJob {
     @Override public Object execute() throws IgniteException {
         System.out.println(">>> Starting ORC job: " + this);
 
-        int rowCnt = 0;
+        long cnt;
+
+        long startTime = System.currentTimeMillis();
 
         Reader reader = DirectOrcLoaderUtils.readerForPath(path);
 
         StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
 
         if (affMode)
-            return loadWithAffinity(reader, inspector);
+            cnt = loadWithAffinity(reader, inspector);
+        else
+            cnt = loadWithoutAffinity(reader, inspector);
+
+        long dur = (System.currentTimeMillis() - startTime) / 1_000_000;
+
+        return new DirectOrcLoaderJobResult(this.toString(), ignite.cluster().localNode().id(), cnt, dur);
+    }
+
+    /**
+     * Perform load without affinity mode.
+     *
+     * @param reader Reader.
+     * @param inspector Inspector.
+     * @return Amount of loaded key-value pairs.
+     */
+    private long loadWithoutAffinity(Reader reader, StructObjectInspector inspector) {
+        long cnt = 0;
 
         try (IgniteDataStreamer<CHA.Key, CHA> streamer = ignite.dataStreamer(cacheName)) {
             streamer.perNodeBufferSize(bufSize);
@@ -97,7 +124,7 @@ public class DirectOrcLoaderJob implements ComputeJob {
                 OrcStruct row = null;
 
                 while (rows.hasNext()) {
-                    row = (OrcStruct)rows.next(row);
+                    row = (OrcStruct) rows.next(row);
 
                     CHA.Key key = DirectOrcLoaderUtils.structToKey(row, inspector);
                     CHA val = DirectOrcLoaderUtils.structToValue(row, inspector);
@@ -105,7 +132,7 @@ public class DirectOrcLoaderJob implements ComputeJob {
                     if (!skipCache)
                         streamer.addData(key, val);
 
-                    rowCnt++;
+                    cnt++;
                 }
             }
             catch (Exception e) {
@@ -113,7 +140,7 @@ public class DirectOrcLoaderJob implements ComputeJob {
             }
         }
 
-        return rowCnt;
+        return cnt;
     }
 
     /**
@@ -123,10 +150,10 @@ public class DirectOrcLoaderJob implements ComputeJob {
      * @param inspector Inspector.
      * @return Amount of loaded key-value pairs.
      */
-    private int loadWithAffinity(Reader reader, StructObjectInspector inspector) {
+    private long loadWithAffinity(Reader reader, StructObjectInspector inspector) {
         IgniteCache<CHA.Key, CHA> cache = ignite.cache(cacheName);
 
-        int rowCnt = 0;
+        long cnt = 0;
 
         Map<CHA.Key, CHA> buf = new HashMap<>(bufSize, 1.0f);
 
@@ -157,7 +184,7 @@ public class DirectOrcLoaderJob implements ComputeJob {
                     buf = new HashMap<>(bufSize, 1.0f);
                 }
 
-                rowCnt++;
+                cnt++;
             }
 
             if (buf.size() > 0)
@@ -180,14 +207,8 @@ public class DirectOrcLoaderJob implements ComputeJob {
             throw new IgniteException("Failed to load ORC data to cache.", e);
         }
 
-        return rowCnt;
+        return cnt;
     }
-
-    /** Current async operations. */
-    private int asyncOps;
-
-    /** Error ocurred during async execution. */
-    private Exception asyncErr;
 
     /**
      * Load batch in affinity mode.
