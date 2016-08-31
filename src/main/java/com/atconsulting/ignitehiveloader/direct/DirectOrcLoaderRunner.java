@@ -24,6 +24,9 @@ public class DirectOrcLoaderRunner {
     /** Load mode. */
     private static final String PROP_MODE = "ignite.orc.mode";
 
+    /** Skip cache flag. */
+    private static final String PROP_SKIP_CACHE = "ignite.orc.skip_cache";
+
     /**
      * Entry point.
      */
@@ -49,12 +52,14 @@ public class DirectOrcLoaderRunner {
 
         DirectOrcLoaderMode mode = DirectOrcLoaderMode.valueOf(modeStr);
 
+        boolean skipCache = Boolean.getBoolean(PROP_SKIP_CACHE);
+
         Ignition.setClientMode(true);
 
         try (Ignite ignite = Ignition.start(cfgPath)) {
             clearCache(ignite, cacheName);
 
-            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, mode);
+            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, mode, skipCache);
 
             System.out.println(">>> Starting ORC load task: " + task);
 

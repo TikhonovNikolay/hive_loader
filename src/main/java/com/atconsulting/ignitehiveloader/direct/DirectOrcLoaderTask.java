@@ -35,6 +35,9 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
     /** Load mode. */
     private final DirectOrcLoaderMode mode;
 
+    /** Skip cache flag. */
+    private final boolean skipCache;
+
     /**
      * Constructor.
      *
@@ -42,12 +45,15 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @param cacheName Cache name.
      * @param bufSize Buffer size.
      * @param mode Load mode.
+     * @param skipCache Skip cache flag.
      */
-    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, DirectOrcLoaderMode mode) {
+    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, DirectOrcLoaderMode mode,
+        boolean skipCache) {
         this.pathStr = pathStr;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
         this.mode = mode;
+        this.skipCache = skipCache;
     }
 
     /** {@inheritDoc} */
@@ -62,7 +68,7 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
 
         FileStatus[] files = DirectOrcLoaderUtils.enumerateFiles(fs, path);
 
-        if (mode == DirectOrcLoaderMode.LOCAL_KEYS || mode == DirectOrcLoaderMode.LOCAL_KEYS_NO_CACHE) {
+        if (mode == DirectOrcLoaderMode.LOCAL_KEYS) {
             // Every node will process every file, but will load only primary keys.
             for (FileStatus file : files) {
                 for (ClusterNode node : nodes) {
@@ -212,7 +218,7 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @return Job.
      */
     private DirectOrcLoaderJob jobForFile(FileStatus file) {
-        return new DirectOrcLoaderJob(file.getPath().toString(), cacheName, bufSize, mode);
+        return new DirectOrcLoaderJob(file.getPath().toString(), cacheName, bufSize, mode, skipCache);
     }
 
     /** {@inheritDoc} */

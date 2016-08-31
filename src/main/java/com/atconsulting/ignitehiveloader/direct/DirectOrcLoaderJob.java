@@ -35,6 +35,9 @@ public class DirectOrcLoaderJob implements ComputeJob {
     /** Load mode. */
     private DirectOrcLoaderMode mode;
 
+    /** Skip cache flag. */
+    private boolean skipCache;
+
     /** Injected Ignite instance. */
     @IgniteInstanceResource
     @GridToStringExclude
@@ -54,12 +57,14 @@ public class DirectOrcLoaderJob implements ComputeJob {
      * @param cacheName Cache name.
      * @param bufSize Buffer size.
      * @param mode Load mode.
+     * @param skipCache Skip cache flag.
      */
-    public DirectOrcLoaderJob(String path, String cacheName, int bufSize, DirectOrcLoaderMode mode) {
+    public DirectOrcLoaderJob(String path, String cacheName, int bufSize, DirectOrcLoaderMode mode, boolean skipCache) {
         this.path = path;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
         this.mode = mode;
+        this.skipCache = skipCache;
     }
 
     /** {@inheritDoc} */
@@ -75,12 +80,6 @@ public class DirectOrcLoaderJob implements ComputeJob {
         StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
 
         switch (mode) {
-            case LOCAL_FILES_NO_CACHE:
-            case LOCAL_KEYS_NO_CACHE:
-                cnt = readNoLoad(reader, inspector);
-
-                break;
-
             case LOCAL_FILES:
                 cnt = readAndLoad(reader, inspector, false);
 
@@ -103,38 +102,6 @@ public class DirectOrcLoaderJob implements ComputeJob {
         long dur = (System.currentTimeMillis() - startTime) / 1_000_000;
 
         return new DirectOrcLoaderJobResult(this.toString(), ignite.cluster().localNode().id(), cnt, dur);
-    }
-
-    /**
-     * Read data without loading it to cache.
-     *
-     * @param reader Reader.
-     * @param inspector Inspector.
-     * @return Number of processed key-value pairs.
-     */
-    private long readNoLoad(Reader reader, StructObjectInspector inspector) {
-        long cnt = 0;
-
-        try {
-            RecordReader rows = reader.rows();
-
-            OrcStruct row = null;
-
-            while (rows.hasNext()) {
-                row = (OrcStruct) rows.next(row);
-
-                CHA.Key key = DirectOrcLoaderUtils.structToKey(row, inspector);
-                CHA val = DirectOrcLoaderUtils.structToValue(row, inspector);
-
-                if (key != null && val != null)
-                    cnt++;
-            }
-        }
-        catch (Exception e) {
-            throw new IgniteException("Failed to read ORC data.", e);
-        }
-
-        return cnt;
     }
 
     /**
@@ -175,7 +142,8 @@ public class DirectOrcLoaderJob implements ComputeJob {
 
                     CHA val = DirectOrcLoaderUtils.structToValue(row, inspector);
 
-                    streamer.addData(key, val);
+                    if (!skipCache)
+                        streamer.addData(key, val);
 
                     cnt++;
                 }
@@ -224,7 +192,8 @@ public class DirectOrcLoaderJob implements ComputeJob {
                 buf.put(key, val);
 
                 if (buf.size() == bufSize) {
-                    cache.putAll(buf);
+                    if (!skipCache)
+                        cache.putAll(buf);
 
                     buf = new HashMap<>(bufSize, 1.0f);
                 }
@@ -232,8 +201,10 @@ public class DirectOrcLoaderJob implements ComputeJob {
                 cnt++;
             }
 
-            if (buf.size() > 0)
-                cache.putAll(buf);
+            if (buf.size() > 0) {
+                if (!skipCache)
+                    cache.putAll(buf);
+            }
         }
         catch (Exception e) {
             throw new IgniteException("Failed to load ORC data to cache.", e);
