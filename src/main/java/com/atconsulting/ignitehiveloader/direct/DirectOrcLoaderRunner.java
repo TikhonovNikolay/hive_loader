@@ -54,45 +54,38 @@ public class DirectOrcLoaderRunner {
 
         boolean skipCache = Boolean.getBoolean(PROP_SKIP_CACHE);
 
-        clearCache(cfgPath, cacheName);
-
-        System.out.println(">>> Starting ORC load task [path=" + path + ", cfgPath=" + cfgPath +
-            ", cacheName=" + cacheName + ", bufSize=" + bufSize + ", affMode=" + affMode + ']');
-
         Ignition.setClientMode(true);
 
         try (Ignite ignite = Ignition.start(cfgPath)) {
+            clearCache(ignite, cacheName);
+
+            System.out.println(">>> Starting ORC load task [path=" + path + ", cfgPath=" + cfgPath +
+                ", cacheName=" + cacheName + ", bufSize=" + bufSize + ", affMode=" + affMode + ']');
+
             IgniteCompute compute = ignite.compute(ignite.cluster().forDataNodes(cacheName));
 
             long startTime = System.nanoTime();
 
-            int rows = compute.execute(
-                new DirectOrcLoaderTask(path, cacheName, bufSize, affMode, concurrency, skipCache), null);
+            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, affMode, concurrency,
+                skipCache);
+
+            int rows = compute.execute(task, null);
 
             long dur = (System.nanoTime() - startTime) / 1_000_000;
 
-            System.out.println(">>> Finished ORC load task [dur=" + dur + ", rows=" + rows + ']');
+            System.out.println(">>> Finished ORC load task [task=" + task + ", dur=" + dur + ", rows=" + rows + ']');
         }
     }
 
     /**
      * Clear cache before running task.
      *
-     * @param cfgPath Path to XML config.
+     * @param ignite Ignite instance.
      * @param cacheName Cache name.
      */
-    private static void clearCache(String cfgPath, String cacheName) {
-        Ignition.setClientMode(true);
+    private static void clearCache(Ignite ignite, String cacheName) {
+        ignite.cache(cacheName).clear();
 
-        try {
-            try (Ignite ignite = Ignition.start(cfgPath)) {
-                ignite.cache(cacheName).clear();
-            }
-        }
-        finally {
-            Ignition.setClientMode(false);
-        }
-
-        System.out.println(">>> Cleared target cache: " + cacheName);
+        System.out.println(">>> Cleared cache: " + cacheName);
     }
 }
