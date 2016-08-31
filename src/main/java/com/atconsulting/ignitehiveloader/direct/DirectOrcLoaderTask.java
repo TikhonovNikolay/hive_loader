@@ -32,11 +32,8 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
     /** Buffer size. */
     private final int bufSize;
 
-    /** Affinity mode flag. */
-    private final boolean affMode;
-
-    /** Skip cache flag. */
-    private final boolean skipCache;
+    /** Load mode. */
+    private final DirectOrcLoaderMode mode;
 
     /**
      * Constructor.
@@ -44,15 +41,13 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @param pathStr Path to ORC files.
      * @param cacheName Cache name.
      * @param bufSize Buffer size.
-     * @param affMode Affinity mode flag.
-     * @param skipCache Skip cache flag.
+     * @param mode Load mode.
      */
-    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, boolean affMode, boolean skipCache) {
+    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, DirectOrcLoaderMode mode) {
         this.pathStr = pathStr;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
-        this.affMode = affMode;
-        this.skipCache = skipCache;
+        this.mode = mode;
     }
 
     /** {@inheritDoc} */
@@ -67,7 +62,7 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
 
         FileStatus[] files = DirectOrcLoaderUtils.enumerateFiles(fs, path);
 
-        if (affMode) {
+        if (mode == DirectOrcLoaderMode.LOCAL_KEYS || mode == DirectOrcLoaderMode.LOCAL_KEYS_NO_CACHE) {
             // Every node will process every file, but will load only primary keys.
             for (FileStatus file : files) {
                 for (ClusterNode node : nodes) {
@@ -217,7 +212,7 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @return Job.
      */
     private DirectOrcLoaderJob jobForFile(FileStatus file) {
-        return new DirectOrcLoaderJob(file.getPath().toString(), cacheName, bufSize, affMode, skipCache);
+        return new DirectOrcLoaderJob(file.getPath().toString(), cacheName, bufSize, mode);
     }
 
     /** {@inheritDoc} */

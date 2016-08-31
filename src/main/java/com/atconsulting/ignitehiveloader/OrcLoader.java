@@ -50,7 +50,6 @@ import java.io.IOException;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -370,7 +369,7 @@ public class OrcLoader {
             }
 
             if (customAffinity())
-                ((CHA.Key2)key).aff = affKey;
+                ((CHA.Key2)key).affKey = affKey;
 
             return new IgniteBiTuple<>(key, cha);
         }

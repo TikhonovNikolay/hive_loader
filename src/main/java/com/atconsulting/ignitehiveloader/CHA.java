@@ -95,7 +95,7 @@ public class CHA {
         private long subscriberId;
 
         @AffinityKeyMapped
-        public int aff;
+        public int affKey;
 
         public Key2() {}
 
@@ -130,12 +130,12 @@ public class CHA {
             final Key2 key = (Key2) object;
             return subscriberId == key.subscriberId
                 && Objects.equals(startCallDateTime, key.startCallDateTime)
-                && aff == key.aff;
+                && affKey == key.affKey;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(subscriberId, startCallDateTime, aff);
+            return Objects.hash(subscriberId, startCallDateTime, affKey);
         }
 
         @Override
@@ -143,7 +143,7 @@ public class CHA {
             return "CHA.Key2["
                 + "startCallDateTime=" + startCallDateTime
                 + ", subscriberId=" + subscriberId
-                + ", aff=" + aff
+                + ", aff=" + affKey
                 + ']';
         }
     }

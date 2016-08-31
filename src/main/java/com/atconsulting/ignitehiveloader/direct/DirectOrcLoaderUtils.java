@@ -128,6 +128,27 @@ class DirectOrcLoaderUtils {
      *
      * @param struct Structure.
      * @param inspector Object inspector.
+     * @param affKey Affinity key.
+     * @return Key.
+     */
+    static CHA.Key2 structToKey(OrcStruct struct, StructObjectInspector inspector, int affKey) {
+        CHA.Key2 res = new CHA.Key2();
+
+        List<? extends StructField> fields = inspector.getAllStructFieldRefs();
+
+        res.setSubscriberId(longValue(struct, inspector, fields.get(0)));
+        res.setStartCallDateTime(timestampValue(struct, inspector, fields.get(1)));
+
+        res.affKey = affKey;
+
+        return res;
+    }
+
+    /**
+     * Convert ORC structure to key.
+     *
+     * @param struct Structure.
+     * @param inspector Object inspector.
      * @return Key.
      */
     static CHA structToValue(OrcStruct struct, StructObjectInspector inspector) {

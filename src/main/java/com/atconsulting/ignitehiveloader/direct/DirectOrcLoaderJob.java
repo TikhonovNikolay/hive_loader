@@ -32,11 +32,8 @@ public class DirectOrcLoaderJob implements ComputeJob {
     /** Buffer size. */
     private int bufSize;
 
-    /** Affinity mode flag. */
-    private boolean affMode;
-
-    /** Skip cache flag. */
-    private boolean skipCache;
+    /** Load mode. */
+    private DirectOrcLoaderMode mode;
 
     /** Injected Ignite instance. */
     @IgniteInstanceResource
@@ -56,15 +53,13 @@ public class DirectOrcLoaderJob implements ComputeJob {
      * @param path Path.
      * @param cacheName Cache name.
      * @param bufSize Buffer size.
-     * @param affMode Affinity mode.
-     * @param skipCache Skip cache flag.
+     * @param mode Load mode.
      */
-    public DirectOrcLoaderJob(String path, String cacheName, int bufSize, boolean affMode, boolean skipCache) {
+    public DirectOrcLoaderJob(String path, String cacheName, int bufSize, DirectOrcLoaderMode mode) {
         this.path = path;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
-        this.affMode = affMode;
-        this.skipCache = skipCache;
+        this.mode = mode;
     }
 
     /** {@inheritDoc} */
@@ -79,10 +74,31 @@ public class DirectOrcLoaderJob implements ComputeJob {
 
         StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
 
-        if (affMode)
-            cnt = loadWithAffinity(reader, inspector);
-        else
-            cnt = loadWithoutAffinity(reader, inspector);
+        switch (mode) {
+            case LOCAL_FILES_NO_CACHE:
+            case LOCAL_KEYS_NO_CACHE:
+                cnt = readNoLoad(reader, inspector);
+
+                break;
+
+            case LOCAL_FILES:
+                cnt = readAndLoad(reader, inspector, false);
+
+                break;
+
+            case LOCAL_FILES_FORCE_PRIMARY:
+                cnt = readAndLoad(reader, inspector, true);
+
+                break;
+
+            case LOCAL_KEYS:
+                cnt = readAndLoadLocalKeys(reader, inspector);
+
+                break;
+
+            default:
+                throw new IgniteException("Unsupported mode: " + mode);
+        }
 
         long dur = (System.currentTimeMillis() - startTime) / 1_000_000;
 
@@ -90,16 +106,60 @@ public class DirectOrcLoaderJob implements ComputeJob {
     }
 
     /**
-     * Perform load without affinity mode.
+     * Read data without loading it to cache.
      *
      * @param reader Reader.
      * @param inspector Inspector.
-     * @return Amount of loaded key-value pairs.
+     * @return Number of processed key-value pairs.
      */
-    private long loadWithoutAffinity(Reader reader, StructObjectInspector inspector) {
+    private long readNoLoad(Reader reader, StructObjectInspector inspector) {
         long cnt = 0;
 
-        try (IgniteDataStreamer<CHA.Key, CHA> streamer = ignite.dataStreamer(cacheName)) {
+        try {
+            RecordReader rows = reader.rows();
+
+            OrcStruct row = null;
+
+            while (rows.hasNext()) {
+                row = (OrcStruct) rows.next(row);
+
+                CHA.Key key = DirectOrcLoaderUtils.structToKey(row, inspector);
+                CHA val = DirectOrcLoaderUtils.structToValue(row, inspector);
+
+                if (key != null && val != null)
+                    cnt++;
+            }
+        }
+        catch (Exception e) {
+            throw new IgniteException("Failed to read ORC data.", e);
+        }
+
+        return cnt;
+    }
+
+    /**
+     * Read and load keys optionally changing their affinity to match local node.
+     *
+     * @param reader Reader.
+     * @param inspector Inspector.
+     * @param forcePrimary Whether to force primary keys.
+     * @return Amount of loaded key-value pairs.
+     */
+    private long readAndLoad(Reader reader, StructObjectInspector inspector, boolean forcePrimary) {
+        int affKey = 0;
+
+        if (forcePrimary) {
+            Affinity<Integer> aff = ignite.affinity(cacheName);
+
+            ClusterNode locNode = ignite.cluster().localNode();
+
+            while (!aff.isPrimary(locNode, affKey))
+                affKey++;
+        }
+
+        long cnt = 0;
+
+        try (IgniteDataStreamer<Object, CHA> streamer = ignite.dataStreamer(cacheName)) {
             streamer.perNodeBufferSize(bufSize);
 
             try {
@@ -110,11 +170,12 @@ public class DirectOrcLoaderJob implements ComputeJob {
                 while (rows.hasNext()) {
                     row = (OrcStruct) rows.next(row);
 
-                    CHA.Key key = DirectOrcLoaderUtils.structToKey(row, inspector);
+                    Object key = forcePrimary ? DirectOrcLoaderUtils.structToKey(row, inspector, affKey) :
+                        DirectOrcLoaderUtils.structToKey(row, inspector);
+
                     CHA val = DirectOrcLoaderUtils.structToValue(row, inspector);
 
-                    if (!skipCache)
-                        streamer.addData(key, val);
+                    streamer.addData(key, val);
 
                     cnt++;
                 }
@@ -128,16 +189,16 @@ public class DirectOrcLoaderJob implements ComputeJob {
     }
 
     /**
-     * Perform load with affinity mode.
+     * Read and load only local keys.
      *
      * @param reader Reader.
      * @param inspector Inspector.
      * @return Amount of loaded key-value pairs.
      */
-    private long loadWithAffinity(Reader reader, StructObjectInspector inspector) {
-        IgniteCache<CHA.Key, CHA> cache = ignite.cache(cacheName);
-
+    private long readAndLoadLocalKeys(Reader reader, StructObjectInspector inspector) {
         long cnt = 0;
+
+        IgniteCache<CHA.Key, CHA> cache = ignite.cache(cacheName);
 
         Map<CHA.Key, CHA> buf = new HashMap<>(bufSize, 1.0f);
 
@@ -155,7 +216,7 @@ public class DirectOrcLoaderJob implements ComputeJob {
 
                 CHA.Key key = DirectOrcLoaderUtils.structToKey(row, inspector);
 
-                if (affMode && !aff.isPrimary(locNode, key))
+                if (!aff.isPrimary(locNode, key))
                     continue;
 
                 CHA val = DirectOrcLoaderUtils.structToValue(row, inspector);
@@ -163,8 +224,7 @@ public class DirectOrcLoaderJob implements ComputeJob {
                 buf.put(key, val);
 
                 if (buf.size() == bufSize) {
-                    if (!skipCache)
-                        cache.putAll(buf);
+                    cache.putAll(buf);
 
                     buf = new HashMap<>(bufSize, 1.0f);
                 }
@@ -172,10 +232,8 @@ public class DirectOrcLoaderJob implements ComputeJob {
                 cnt++;
             }
 
-            if (buf.size() > 0) {
-                if (!skipCache)
-                    cache.putAll(buf);
-            }
+            if (buf.size() > 0)
+                cache.putAll(buf);
         }
         catch (Exception e) {
             throw new IgniteException("Failed to load ORC data to cache.", e);

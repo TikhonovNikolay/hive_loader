@@ -21,11 +21,8 @@ public class DirectOrcLoaderRunner {
     /** Buffer size. */
     private static final String PROP_BUF_SIZE = "ignite.orc.buf_size";
 
-    /** Affinity mode flag. */
-    private static final String PROP_AFF_MODE = "ignite.orc.affinity_mode";
-
-    /** Skip cache load flag. */
-    private static final String PROP_SKIP_CACHE = "ignite.orc.skip_cache";
+    /** Load mode. */
+    private static final String PROP_MODE = "ignite.orc.mode";
 
     /**
      * Entry point.
@@ -45,23 +42,25 @@ public class DirectOrcLoaderRunner {
 
         int bufSize = Integer.getInteger(PROP_BUF_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
 
-        boolean affMode = Boolean.getBoolean(PROP_AFF_MODE);
+        String modeStr = System.getProperty(PROP_MODE);
 
-        boolean skipCache = Boolean.getBoolean(PROP_SKIP_CACHE);
+        if (modeStr == null)
+            throw new IllegalArgumentException("Mode is not specified.");
+
+        DirectOrcLoaderMode mode = DirectOrcLoaderMode.valueOf(modeStr);
 
         Ignition.setClientMode(true);
 
         try (Ignite ignite = Ignition.start(cfgPath)) {
             clearCache(ignite, cacheName);
 
-            System.out.println(">>> Starting ORC load task [path=" + path + ", cfgPath=" + cfgPath +
-                ", cacheName=" + cacheName + ", bufSize=" + bufSize + ", affMode=" + affMode + ']');
+            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, mode);
+
+            System.out.println(">>> Starting ORC load task: " + task);
 
             IgniteCompute compute = ignite.compute(ignite.cluster().forDataNodes(cacheName));
 
             long startTime = System.nanoTime();
-
-            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, affMode, skipCache);
 
             int rows = compute.execute(task, null);
 
