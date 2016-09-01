@@ -19,6 +19,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -266,7 +267,7 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
             paths[i] = files.get(i).getPath().toString();
 
         return new DirectOrcLoaderJob(paths, cacheName, bufSize, parallelOps, mode,
-            filterCurDay ? new OrcLoaderSameDayFilter() : null);
+            filterCurDay ? new OrcLoaderSameDayFilter(new Date()) : null);
     }
 
     /** {@inheritDoc} */
