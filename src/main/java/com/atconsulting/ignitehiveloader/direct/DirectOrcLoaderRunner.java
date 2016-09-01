@@ -38,7 +38,7 @@ public class DirectOrcLoaderRunner {
         if (parallelOps <= 0)
             throw new IllegalArgumentException("Parallel ops size must be positive.");
 
-        String modeStr = System.getProperty(OrcLoaderProperties.MODE);
+        String modeStr = System.getProperty(OrcLoaderProperties.MODE, OrcLoaderMode.STREAMER_BATCHED.name());
 
         if (modeStr == null)
             throw new IllegalArgumentException("Mode is not specified.");
@@ -47,6 +47,11 @@ public class DirectOrcLoaderRunner {
 
         if (mode == OrcLoaderMode.PUT)
             throw new IllegalArgumentException("Mode is not supported: " + mode);
+
+        int streamerBatchedParallelOps = Integer.getInteger(OrcLoaderProperties.STREAMER_BATCHED_PARALLEL_OPS, 1);
+
+        if (streamerBatchedParallelOps < 1)
+            streamerBatchedParallelOps = 1;
 
         boolean jobPerFile = Boolean.getBoolean(OrcLoaderProperties.JOB_PER_FILE);
         boolean filterCurDay = Boolean.getBoolean(OrcLoaderProperties.FILTER_CURRENT_DAY);
@@ -57,8 +62,8 @@ public class DirectOrcLoaderRunner {
             if (Boolean.getBoolean(OrcLoaderProperties.CLEAR_CACHE))
                 clearCache(ignite, cacheName);
 
-            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, parallelOps, mode, jobPerFile,
-                filterCurDay, ignite.cluster().localNode());
+            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, parallelOps, mode,
+                streamerBatchedParallelOps, jobPerFile, filterCurDay, ignite.cluster().localNode());
 
             System.out.println(">>> Starting ORC load task: " + task);
 

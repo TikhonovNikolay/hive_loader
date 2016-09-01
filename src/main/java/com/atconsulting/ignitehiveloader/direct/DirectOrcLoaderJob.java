@@ -18,8 +18,12 @@ import org.apache.ignite.lang.IgniteBiTuple;
 import org.apache.ignite.resources.IgniteInstanceResource;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Ignite job to load a file into Ignite.
@@ -39,6 +43,9 @@ public class DirectOrcLoaderJob implements ComputeJob {
 
     /** Load mode. */
     private OrcLoaderMode mode;
+
+    /** Number of parallel operations for batched streamer.   */
+    private int streamerBatchedParallelOps;
 
     /** Optional filter. */
     private OrcLoaderFilter filter;
@@ -66,12 +73,13 @@ public class DirectOrcLoaderJob implements ComputeJob {
      * @param filter Optional filter.
      */
     public DirectOrcLoaderJob(String[] paths, String cacheName, int bufSize, int parallelOps, OrcLoaderMode mode,
-        OrcLoaderFilter filter) {
+        int streamerBatchedParallelOps, OrcLoaderFilter filter) {
         this.paths = paths;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
         this.parallelOps = parallelOps;
         this.mode = mode;
+        this.streamerBatchedParallelOps = streamerBatchedParallelOps;
         this.filter = filter;
     }
 
@@ -83,38 +91,79 @@ public class DirectOrcLoaderJob implements ComputeJob {
 
         long startTime = System.currentTimeMillis();
 
-        try (IgniteDataStreamer<CHA.Key, CHA> streamer = ignite.dataStreamer(cacheName)) {
-            streamer.perNodeBufferSize(bufSize);
-            streamer.perNodeParallelOperations(parallelOps);
+        if (mode == OrcLoaderMode.STREAMER_BATCHED)
+            cnt = readAndLoadBatched();
+        else {
+            try (IgniteDataStreamer<CHA.Key, CHA> streamer = createStreamer()) {
+                for (String path : paths) {
+                    switch (mode) {
+                        case SKIP:
+                            cnt += readAndLoad(streamer, path, true);
 
-            for (String path : paths) {
-                switch (mode) {
-                    case SKIP:
-                        cnt += readAndLoad(streamer, path, true);
+                            break;
 
-                        break;
+                        case STREAMER:
+                            cnt += readAndLoad(streamer, path, false);
 
-                    case STREAMER:
-                        cnt += readAndLoad(streamer, path, false);
+                            break;
 
-                        break;
+                        default:
+                            throw new IgniteException("Unsupported mode: " + mode);
+                    }
 
-                    case STREAMER_BATCHED:
-                        cnt += readAndLoadBatched(streamer, path);
-
-                        break;
-
-                    default:
-                        throw new IgniteException("Unsupported mode: " + mode);
+                    System.out.println(">>> Processed file: " + path);
                 }
-
-                System.out.println(">>> Processed file: " + path);
             }
         }
 
         long dur = (System.currentTimeMillis() - startTime) / 1_000_000;
 
         return new DirectOrcLoaderJobResult(this.toString(), ignite.cluster().localNode().id(), cnt, dur);
+    }
+
+    /**
+     * Read and load keys batching them into separate buffer before passing to streamer.
+     *
+     * @return Amount of loaded key-value pairs.
+     */
+    @SuppressWarnings("unchecked")
+    private long readAndLoadBatched() {
+        AtomicLong res = new AtomicLong();
+
+        try (IgniteDataStreamer<CHA.Key, CHA> streamer = createStreamer()) {
+            // Create queue with tasks.
+            ConcurrentLinkedQueue<String> pathsQueue = new ConcurrentLinkedQueue<>();
+
+            Collections.addAll(pathsQueue, paths);
+
+            // Start async threads if needed.
+            List<Thread> threads = new ArrayList<>();
+
+            for (int i = 1; i < streamerBatchedParallelOps; i++) {
+                Thread thread = new Thread(new BatchLoadTask(streamer, pathsQueue, res));
+
+                thread.start();
+
+                threads.add(thread);
+            }
+
+            // Perform sync processing.
+            new BatchLoadTask(streamer, pathsQueue, res).run();
+
+            // Await for threads to finish.
+            try {
+                for (Thread thread : threads)
+                    thread.join();
+            }
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+
+                throw new IgniteException("Failed to wait for async threads to finish.", e);
+            }
+
+            // Return.
+            return res.get();
+        }
     }
 
     /**
@@ -209,6 +258,20 @@ public class DirectOrcLoaderJob implements ComputeJob {
         return cnt;
     }
 
+    /**
+     * Create streamer.
+     *
+     * @return Streamer.
+     */
+    private IgniteDataStreamer<CHA.Key, CHA> createStreamer() {
+        IgniteDataStreamer<CHA.Key, CHA> streamer = ignite.dataStreamer(cacheName);
+
+        streamer.perNodeBufferSize(bufSize);
+        streamer.perNodeParallelOperations(parallelOps);
+
+        return streamer;
+    }
+
     /** {@inheritDoc} */
     @Override public void cancel() {
         // No-op.
@@ -217,5 +280,44 @@ public class DirectOrcLoaderJob implements ComputeJob {
     /** {@inheritDoc} */
     @Override public String toString() {
         return S.toString(DirectOrcLoaderJob.class, this);
+    }
+
+    /**
+     * Batch load task.
+     */
+    private class BatchLoadTask implements Runnable {
+        /** Streamer. */
+        private final IgniteDataStreamer<CHA.Key, CHA> streamer;
+
+        /** Path to process. */
+        private final Queue<String> pathsQueue;
+
+        /** Result holder. */
+        private final AtomicLong res;
+
+        /**
+         * Constructor.
+         *
+         * @param streamer Streamer.
+         * @param pathsQueue Paths to process.
+         * @param res Result holder.
+         */
+        BatchLoadTask(IgniteDataStreamer<CHA.Key, CHA> streamer, Queue<String> pathsQueue, AtomicLong res) {
+            this.streamer = streamer;
+            this.pathsQueue = pathsQueue;
+            this.res = res;
+        }
+
+        /** {@inheritDoc} */
+        @Override public void run() {
+            long res0 = 0;
+
+            String path;
+
+            while ((path = pathsQueue.peek()) != null)
+                res0 += readAndLoadBatched(streamer, path);
+
+            res.addAndGet(res0);
+        }
     }
 }

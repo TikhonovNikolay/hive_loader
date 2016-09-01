@@ -34,6 +34,9 @@ public class OrcLoaderProperties {
     /** Property: whether separate job should be created for each file. */
     public static final String JOB_PER_FILE = "ignite.orc.job_per_file";
 
+    /** How many threads process files and put data into batched streamer. */
+    public static final String STREAMER_BATCHED_PARALLEL_OPS = "ignite.orc.streamer_batched_parallel_ops";
+
     /**
      * Constructor.
      */

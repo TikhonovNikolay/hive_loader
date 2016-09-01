@@ -44,6 +44,9 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
     /** Load mode. */
     private final OrcLoaderMode mode;
 
+    /** Number of parallel operations for batched streamer.   */
+    private final int streamerBatchedParallelOps;
+
     /** Whether single job should be created for a file. */
     private final boolean jobPerFile;
 
@@ -62,17 +65,19 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @param bufSize Buffer size.
      * @param parallelOps Parallel operations.
      * @param mode Load mode.
+     * @param streamerBatchedParallelOps Number of parallel operations for batched streamer.
      * @param jobPerFile Whether single job should be created for a file.
      * @param filterCurDay Whether to load current day only.
      * @param locNode Local node.
      */
     public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, int parallelOps, OrcLoaderMode mode,
-        boolean jobPerFile, boolean filterCurDay, ClusterNode locNode) {
+        int streamerBatchedParallelOps, boolean jobPerFile, boolean filterCurDay, ClusterNode locNode) {
         this.pathStr = pathStr;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
         this.parallelOps = parallelOps;
         this.mode = mode;
+        this.streamerBatchedParallelOps = streamerBatchedParallelOps;
         this.jobPerFile = jobPerFile;
         this.filterCurDay = filterCurDay;
         this.locNode = locNode;
@@ -266,7 +271,7 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
         for (int i = 0; i < files.size(); i++)
             paths[i] = files.get(i).getPath().toString();
 
-        return new DirectOrcLoaderJob(paths, cacheName, bufSize, parallelOps, mode,
+        return new DirectOrcLoaderJob(paths, cacheName, bufSize, parallelOps, mode, streamerBatchedParallelOps,
             filterCurDay ? new OrcLoaderSameDayFilter(new Date()) : null);
     }
 
