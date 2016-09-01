@@ -72,7 +72,7 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
             // Every node will process every file, but will load only primary keys.
             for (FileStatus file : files) {
                 for (ClusterNode node : nodes) {
-                    ComputeJob job = jobForFile(file);
+                    ComputeJob job = jobForFiles(file);
 
                     jobs.put(job, node);
                 }
@@ -87,7 +87,7 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
             for (FileStatus file : files) {
                 ClusterNode node = nodeForFile(fs, file, nodes, nodeCtrs);
 
-                ComputeJob job = jobForFile(file);
+                ComputeJob job = jobForFiles(file);
 
                 jobs.put(job, node);
 
@@ -214,11 +214,16 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
     /**
      * Create job for file.
      *
-     * @param file File.
+     * @param files Files.
      * @return Job.
      */
-    private DirectOrcLoaderJob jobForFile(FileStatus file) {
-        return new DirectOrcLoaderJob(file.getPath().toString(), cacheName, bufSize, mode, skipCache);
+    private DirectOrcLoaderJob jobForFiles(FileStatus... files) {
+        String[] paths = new String[files.length];
+
+        for (int i = 0; i < files.length; i++)
+            paths[i] = files[i].getPath().toString();
+
+        return new DirectOrcLoaderJob(paths, cacheName, bufSize, mode, skipCache);
     }
 
     /** {@inheritDoc} */

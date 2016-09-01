@@ -24,8 +24,8 @@ import java.util.Map;
  * Ignite job to load a file into Ignite.
  */
 public class DirectOrcLoaderJob implements ComputeJob {
-    /** Path to file. */
-    private String path;
+    /** File paths. */
+    private String[] paths;
 
     /** Cache name. */
     private String cacheName;
@@ -54,14 +54,15 @@ public class DirectOrcLoaderJob implements ComputeJob {
     /**
      * Constructor.
      *
-     * @param path Path.
+     * @param paths Paths.
      * @param cacheName Cache name.
      * @param bufSize Buffer size.
      * @param mode Load mode.
      * @param skipCache Skip cache flag.
      */
-    public DirectOrcLoaderJob(String path, String cacheName, int bufSize, DirectOrcLoaderMode mode, boolean skipCache) {
-        this.path = path;
+    public DirectOrcLoaderJob(String[] paths, String cacheName, int bufSize, DirectOrcLoaderMode mode,
+        boolean skipCache) {
+        this.paths = paths;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
         this.mode = mode;
@@ -72,27 +73,29 @@ public class DirectOrcLoaderJob implements ComputeJob {
     @Override public Object execute() throws IgniteException {
         System.out.println(">>> Starting ORC job: " + this);
 
-        long cnt;
+        long cnt = 0;
 
         long startTime = System.currentTimeMillis();
 
-        Reader reader = DirectOrcLoaderUtils.readerForPath(path);
+        for (String path : paths) {
+            Reader reader = DirectOrcLoaderUtils.readerForPath(path);
 
-        StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
+            StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
 
-        switch (mode) {
-            case LOCAL_FILES:
-                cnt = readAndLoad(reader, inspector);
+            switch (mode) {
+                case LOCAL_FILES:
+                    cnt += readAndLoad(reader, inspector);
 
-                break;
+                    break;
 
-            case LOCAL_KEYS:
-                cnt = readAndLoadLocalKeys(reader, inspector);
+                case LOCAL_KEYS:
+                    cnt += readAndLoadLocalKeys(reader, inspector);
 
-                break;
+                    break;
 
-            default:
-                throw new IgniteException("Unsupported mode: " + mode);
+                default:
+                    throw new IgniteException("Unsupported mode: " + mode);
+            }
         }
 
         long dur = (System.currentTimeMillis() - startTime) / 1_000_000;
