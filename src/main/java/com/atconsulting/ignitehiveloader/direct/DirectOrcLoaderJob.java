@@ -88,23 +88,19 @@ public class DirectOrcLoaderJob implements ComputeJob {
             streamer.perNodeParallelOperations(parallelOps);
 
             for (String path : paths) {
-                Reader reader = DirectOrcLoaderUtils.readerForPath(path);
-
-                StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
-
                 switch (mode) {
                     case SKIP:
-                        cnt += readAndLoad(streamer, reader, inspector, true);
+                        cnt += readAndLoad(streamer, path, true);
 
                         break;
 
                     case STREAMER:
-                        cnt += readAndLoad(streamer, reader, inspector, false);
+                        cnt += readAndLoad(streamer, path, false);
 
                         break;
 
                     case STREAMER_BATCHED:
-                        cnt += readAndLoadBatched(streamer, reader, inspector);
+                        cnt += readAndLoadBatched(streamer, path);
 
                         break;
 
@@ -125,12 +121,14 @@ public class DirectOrcLoaderJob implements ComputeJob {
      * Read and load keys batching them into separate buffer before passing to streamer.
      *
      * @param streamer Cache streamer.
-     * @param reader Reader.
-     * @param inspector Inspector.
+     * @param path Path to file.
      * @return Amount of loaded key-value pairs.
      */
-    private long readAndLoadBatched(IgniteDataStreamer<CHA.Key, CHA> streamer, Reader reader,
-        StructObjectInspector inspector) {
+    private long readAndLoadBatched(IgniteDataStreamer<CHA.Key, CHA> streamer, String path) {
+        Reader reader = DirectOrcLoaderUtils.readerForPath(path);
+
+        StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
+
         long cnt = 0;
 
         List<Map.Entry<CHA.Key, CHA>> buf = new ArrayList<>(bufSize);
@@ -173,13 +171,16 @@ public class DirectOrcLoaderJob implements ComputeJob {
      * Read and load keys.
      *
      * @param streamer Cache streamer.
-     * @param reader Reader.
-     * @param inspector Inspector.
+     * @param path Path to file.
      * @param skip Skip flag.
      * @return Amount of loaded key-value pairs.
      */
-    private long readAndLoad(IgniteDataStreamer<CHA.Key, CHA> streamer, Reader reader, StructObjectInspector inspector,
+    private long readAndLoad(IgniteDataStreamer<CHA.Key, CHA> streamer, String path,
         boolean skip) {
+        Reader reader = DirectOrcLoaderUtils.readerForPath(path);
+
+        StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
+
         long cnt = 0;
 
         try {
