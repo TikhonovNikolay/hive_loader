@@ -103,7 +103,13 @@ public class OrcLoader {
         FileOutputFormat.setOutputPath(job, new Path(output));
 
         // Submit the job.
+        long startTime = System.nanoTime();
+
         boolean res = job.waitForCompletion(true);
+
+        long dur = (System.nanoTime() - startTime) / 1_000_000;
+
+        System.out.println(">>> Total duration: " + dur);
 
         System.exit(res ? 0 : 1);
     }
