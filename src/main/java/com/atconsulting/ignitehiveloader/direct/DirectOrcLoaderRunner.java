@@ -53,7 +53,8 @@ public class DirectOrcLoaderRunner {
         Ignition.setClientMode(true);
 
         try (Ignite ignite = Ignition.start(cfgPath)) {
-            clearCache(ignite, cacheName);
+            if (Boolean.getBoolean(OrcLoaderProperties.CLEAR_CACHE))
+                clearCache(ignite, cacheName);
 
             DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, parallelOps, mode, jobPerFile,
                 ignite.cluster().localNode());
