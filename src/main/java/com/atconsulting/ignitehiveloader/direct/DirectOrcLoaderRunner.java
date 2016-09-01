@@ -70,6 +70,8 @@ public class DirectOrcLoaderRunner {
             long dur = (System.nanoTime() - startTime) / 1_000_000;
 
             System.out.println(">>> Finished ORC load task [task=" + task + ", dur=" + dur + ", rows=" + rows + ']');
+
+            System.out.println(">>> Cache size: " + ignite.cache(cacheName).size());
         }
     }
 
