@@ -70,18 +70,20 @@ public class OrcLoader {
         if (bufSize <= 0)
             throw new IllegalArgumentException("Buffer size must be positive: " + bufSize);
 
-        int concurrency = conf.getInt(OrcLoaderProperties.PROP_CONCURRENCY, 1);
+        int concurrency = conf.getInt(OrcLoaderProperties.PROP_PARALLEL_OPS, IgniteDataStreamer.DFLT_MAX_PARALLEL_OPS);
 
         if (concurrency <= 0)
-            throw new IllegalArgumentException("Concurrency must be positive: " + concurrency);
+            throw new IllegalArgumentException("Parallel ops must be positive: " + concurrency);
 
         printProperty(conf, OrcLoaderProperties.PROP_INPUT);
         printProperty(conf, OrcLoaderProperties.PROP_OUTPUT);
         printProperty(conf, OrcLoaderProperties.PROP_CONFIG_PATH);
         printProperty(conf, OrcLoaderProperties.PROP_CACHE_NAME);
-        printProperty(conf, OrcLoaderProperties.PROP_CLEAR_CACHE);
         printProperty(conf, OrcLoaderProperties.PROP_BUFFER_SIZE);
-        printProperty(conf, OrcLoaderProperties.PROP_CONCURRENCY);
+        printProperty(conf, OrcLoaderProperties.PROP_PARALLEL_OPS);
+        printProperty(conf, OrcLoaderProperties.PROP_USE_PUT);
+        printProperty(conf, OrcLoaderProperties.PROP_CLEAR_CACHE);
+        printProperty(conf, OrcLoaderProperties.PROP_SKIP_CACHE);
         printProperty(conf, OrcLoaderProperties.PROP_FILTER_CURRENT_DAY);
 
         // Clear cache if needed.

@@ -67,6 +67,9 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
     /** Ignite instance. */
     private Ignite ignite;
 
+    /** Data streamer. */
+    private IgniteDataStreamer<CHA.Key, CHA> streamer;
+
     /** Ignite cache. */
     private IgniteCache<CHA.Key, CHA> cache;
 
@@ -76,8 +79,14 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
     /** Buffer size. */
     private int bufSize;
 
-    /** Per-node concurrency. */
-    private int concurrency;
+    /** Total parallel ops (parallelOps * node count) */
+    private int totalParallelOps;
+
+    /** Whether put should be used instead of streamer. */
+    private boolean usePut;
+
+    /** Whether data should not be put to cache. */
+    private boolean skipCache;
 
     /** Whether only current day should be loaded. */
     private boolean filterCurDay;
@@ -101,7 +110,7 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
     private long ctrAddDur;
 
     /** Amount of active operations. */
-    private int activeOps;
+    private int curParallelOps;
 
     /** Error ocurred during put. */
     private Exception putErr;
@@ -119,8 +128,7 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
         String cfgPath = conf.get(OrcLoaderProperties.PROP_CONFIG_PATH);
 
         if (cfgPath == null)
-            throw new IllegalArgumentException("Path to Ignite XML configuration is not specified " +
-                "(set " + OrcLoaderProperties.PROP_CONFIG_PATH + " property).");
+            throw new IllegalArgumentException("Path to Ignite XML configuration is not specified.");
 
         String cacheName = conf.get(OrcLoaderProperties.PROP_CACHE_NAME);
 
@@ -129,24 +137,36 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
         if (bufSize <= 0)
             throw new IllegalArgumentException("Buffer size cannot be negative: " + bufSize);
 
-        concurrency = conf.getInt(OrcLoaderProperties.PROP_CONCURRENCY, 1);
+        int parallelOps = conf.getInt(OrcLoaderProperties.PROP_PARALLEL_OPS, IgniteDataStreamer.DFLT_MAX_PARALLEL_OPS);
 
-        if (concurrency <= 0)
-            throw new IllegalArgumentException("Concurrency must be positive: " + concurrency);
+        if (parallelOps <= 0)
+            throw new IllegalArgumentException("Parallel ops must be positive: " + parallelOps);
 
+        usePut = conf.getBoolean(OrcLoaderProperties.PROP_USE_PUT, false);
+        skipCache = conf.getBoolean(OrcLoaderProperties.PROP_SKIP_CACHE, false);
         filterCurDay = conf.getBoolean(OrcLoaderProperties.PROP_FILTER_CURRENT_DAY, false);
 
-        // Start Ignite node in client mode and get cache.
+        // Start Ignite client.
         Ignition.setClientMode(true);
 
         ignite = Ignition.start(cfgPath);
 
+        // Get and configure streamer.
+        streamer = ignite.dataStreamer(cacheName);
+
+        streamer.perNodeBufferSize(bufSize);
+        streamer.perNodeParallelOperations(parallelOps);
+
+        // Get cache and affinity for "put" mode.
         IgniteCache<CHA.Key, CHA> syncCache = ignite.cache(cacheName);
 
         cache = syncCache.withAsync();
 
         aff = ignite.affinity(cacheName);
 
+        totalParallelOps = ignite.cluster().forDataNodes(cacheName).nodes().size();
+
+        // Log setup duration.
         ctrSetupDur = System.nanoTime() - startTime;
     }
 
@@ -176,17 +196,23 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
     @Override protected void cleanup(Context ctx) throws IOException, InterruptedException {
         long cleanupStartTime = System.nanoTime();
 
-        // Send remaining buffers.
-        for (Map<CHA.Key, CHA> buf : bufPerNodeId.values())
-            sendBuffer(buf);
+        if (usePut) {
+            // Send remaining buffers.
+            for (Map<CHA.Key, CHA> buf : bufPerNodeId.values())
+                sendBuffer(buf);
 
-        // Await all cache ops to complete.
-        synchronized (mux) {
-            while (activeOps > 0)
-                mux.wait();
+            // Await all cache ops to complete.
+            synchronized (mux) {
+                while (curParallelOps > 0)
+                    mux.wait();
 
-            if (putErr != null)
-                throw new IgniteException("An error ocurred during put operation.", putErr);
+                if (putErr != null)
+                    throw new IgniteException("An error ocurred during put operation.", putErr);
+            }
+        }
+        else {
+            streamer.flush();
+            streamer.close();
         }
 
         ctrAddDur += System.nanoTime() - cleanupStartTime;
@@ -216,31 +242,38 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
         if (filterCurDay && !currentDay(val.getPutTimestamp()))
             return false;
 
-        // Get affinity node.
-        ClusterNode node = aff.mapKeyToNode(key.getSubscriberId());
+        if (skipCache)
+            return true;
 
-        if (node == null)
-            throw new IllegalStateException("Cannot get primary node for key (all data nodes left the cluster).");
+        if (usePut) {
+            // Get affinity node.
+            ClusterNode node = aff.mapKeyToNode(key.getSubscriberId());
 
-        UUID nodeId = node.id();
+            if (node == null)
+                throw new IllegalStateException("Cannot get primary node for key (all data nodes left the cluster).");
 
-        // Put data to buffer.
-        Map<CHA.Key, CHA> buf = bufPerNodeId.get(nodeId);
+            UUID nodeId = node.id();
 
-        if (buf == null) {
-            buf = new HashMap<>(bufSize, 1.0f);
+            // Put data to buffer.
+            Map<CHA.Key, CHA> buf = bufPerNodeId.get(nodeId);
 
-            bufPerNodeId.put(nodeId, buf);
+            if (buf == null) {
+                buf = new HashMap<>(bufSize, 1.0f);
+
+                bufPerNodeId.put(nodeId, buf);
+            }
+
+            buf.put(key, val);
+
+            // Schedule send if buffer is full.
+            if (buf.size() == bufSize) {
+                sendBuffer(buf);
+
+                bufPerNodeId.remove(nodeId);
+            }
         }
-
-        buf.put(key, val);
-
-        // Schedule send if buffer is full.
-        if (buf.size() == bufSize) {
-            sendBuffer(buf);
-
-            bufPerNodeId.remove(nodeId);
-        }
+        else
+            streamer.addData(key, val);
 
         return true;
     }
@@ -254,10 +287,10 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
         // Obtain permit.
         try {
             synchronized (mux) {
-                while (activeOps >= concurrency)
+                while (curParallelOps >= totalParallelOps)
                     mux.wait();
 
-                activeOps++;
+                curParallelOps++;
             }
         }
         catch (InterruptedException e) {
@@ -287,7 +320,7 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
                     if (err != null && putErr == null)
                         putErr = err;
 
-                    activeOps--;
+                    curParallelOps--;
 
                     mux.notifyAll();
                 }
