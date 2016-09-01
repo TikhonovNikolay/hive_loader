@@ -24,7 +24,6 @@ done
 
 export HADOOP_CLASSPATH=`echo "${LIBJARS}" | tr ',' ':'`
 
-
 ${HADOOP_HOME}/bin/yarn jar ./target/ignite-hive-loader-1.0.0-SNAPSHOT.jar com.atconsulting.ignitehiveloader.OrcLoader \
 -libjars "${LIBJARS}" \
 -Dignite.orc.input=hdfs://testagent06:9000/user/hive/warehouse/cha_min_orc_1g/ \
@@ -32,8 +31,8 @@ ${HADOOP_HOME}/bin/yarn jar ./target/ignite-hive-loader-1.0.0-SNAPSHOT.jar com.a
 -Dignite.orc.config_path=/mnt/nfsshare01/share/default-config.xml \
 -Dignite.orc.cache_name=mycache \
 -Dignite.orc.clear_cache=true \
--Dignite.orc.buffer_size=4096 \
--Dignite.orc.concurrency=48 \
--Dignite.orc.filter.current_day=false \
+-Dignite.orc.buffer_size=1024 \
+-Dignite.orc.parallel_ops=16 \
+-Dignite.orc.mode=STREAMER \
  "${@}"
 
