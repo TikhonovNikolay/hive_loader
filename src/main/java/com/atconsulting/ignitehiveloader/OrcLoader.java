@@ -24,6 +24,7 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteDataStreamer;
 import org.apache.ignite.Ignition;
@@ -33,60 +34,59 @@ import org.apache.ignite.Ignition;
  */
 public class OrcLoader {
     /**
-     * Except the generic arguments the following args are expected: <in_dir> [<in_dir>...] <out_dir>.  
-     *
-     * @param args The program arguments.
-     * @throws Exception On error.
+     * Entry point.
      */
     public static void main(String[] args) throws Exception {
+        // Prepare configuration.
+        final Configuration conf = new Configuration();
+
+        new GenericOptionsParser(conf, args).getRemainingArgs();
+
         // Get job parameters.
-        String input = System.getProperty(OrcLoaderProperties.PROP_INPUT);
+        String input = conf.get(OrcLoaderProperties.PROP_INPUT);
 
         if (input == null)
             throw new IllegalArgumentException("Input path is not specified " +
                 "(set " + OrcLoaderProperties.PROP_INPUT + " property).");
 
-        String output = System.getProperty(OrcLoaderProperties.PROP_OUTPUT);
+        String output = conf.get(OrcLoaderProperties.PROP_OUTPUT);
 
         if (output == null)
             throw new IllegalArgumentException("Output path is not specified " +
                 "(set " + OrcLoaderProperties.PROP_OUTPUT + " property).");
 
-        String cfgPath = System.getProperty(OrcLoaderProperties.PROP_CONFIG_PATH);
+        String cfgPath = conf.get(OrcLoaderProperties.PROP_CONFIG_PATH);
 
         if (cfgPath == null)
             throw new IllegalArgumentException("Path to Ignite XML configuration is not specified " +
                 "(set " + OrcLoaderProperties.PROP_CONFIG_PATH + " property).");
 
-        String cacheName = System.getProperty(OrcLoaderProperties.PROP_CACHE_NAME);
+        String cacheName = conf.get(OrcLoaderProperties.PROP_CACHE_NAME);
 
-        boolean clearCache = Boolean.getBoolean(OrcLoaderProperties.PROP_CLEAR_CACHE);
+        boolean clearCache = conf.getBoolean(OrcLoaderProperties.PROP_CLEAR_CACHE, false);
 
-        int bufSize = Integer.getInteger(OrcLoaderProperties.PROP_BUFFER_SIZE,
-            IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
+        int bufSize = conf.getInt(OrcLoaderProperties.PROP_BUFFER_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
 
         if (bufSize <= 0)
             throw new IllegalArgumentException("Buffer size must be positive: " + bufSize);
 
-        int concurrency = Integer.getInteger(OrcLoaderProperties.PROP_CONCURRENCY, 1);
+        int concurrency = conf.getInt(OrcLoaderProperties.PROP_CONCURRENCY, 1);
 
         if (concurrency <= 0)
             throw new IllegalArgumentException("Concurrency must be positive: " + concurrency);
 
-        boolean filterCurDay = Boolean.getBoolean(OrcLoaderProperties.PROP_FILTER_CURRENT_DAY);
+        printProperty(conf, OrcLoaderProperties.PROP_INPUT);
+        printProperty(conf, OrcLoaderProperties.PROP_OUTPUT);
+        printProperty(conf, OrcLoaderProperties.PROP_CONFIG_PATH);
+        printProperty(conf, OrcLoaderProperties.PROP_CACHE_NAME);
+        printProperty(conf, OrcLoaderProperties.PROP_CLEAR_CACHE);
+        printProperty(conf, OrcLoaderProperties.PROP_BUFFER_SIZE);
+        printProperty(conf, OrcLoaderProperties.PROP_CONCURRENCY);
+        printProperty(conf, OrcLoaderProperties.PROP_FILTER_CURRENT_DAY);
 
         // Clear cache if needed.
         if (clearCache)
             clearCache(cfgPath, cacheName);
-
-        // Prepare configuration.
-        final Configuration conf = new Configuration();
-
-        conf.set(OrcLoaderProperties.PROP_CONFIG_PATH, cfgPath);
-        conf.set(OrcLoaderProperties.PROP_CACHE_NAME, cacheName);
-        conf.setInt(OrcLoaderProperties.PROP_BUFFER_SIZE, bufSize);
-        conf.setInt(OrcLoaderProperties.PROP_CONCURRENCY, concurrency);
-        conf.setBoolean(OrcLoaderProperties.PROP_FILTER_CURRENT_DAY, filterCurDay);
 
         // Prepare job.
         final Job job = Job.getInstance(conf, "Ignite ORC Loader");
@@ -123,5 +123,15 @@ public class OrcLoader {
         finally {
             Ignition.setClientMode(oldCliMode);
         }
+    }
+
+    /**
+     * Print configuration property to the console.
+     *
+     * @param conf Configuration.
+     * @param key Key.
+     */
+    private static void printProperty(Configuration conf, String key) {
+        System.out.println("Conf [" + key + "] = [" + conf.get(key) + ']');
     }
 }

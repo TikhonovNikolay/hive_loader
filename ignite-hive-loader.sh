@@ -1,26 +1,8 @@
 #!/bin/bash -e
 
-ignite_config=${1}
-shift || true
-
-cache_name=${1}
-shift || true
-
-if [[ ${#} -lt 1 || -z "${cache_name}" || -z "${ignite_config}" ]]; then
-   echo "Parameters expected: <ignite config> <cache name> <directory to import> [<more directories to import>]"
-   exit 2
-fi
-
-
-# Unpacked Apache Hive binary distribution: 
-HIVE_HOME=.../apache-hive-1.2.1-bin
-
-# Unpacked Apache Hadoop binary distribution:
-HADOOP_HOME=.../hadoop-2.7.1
-
-# Unpacked Ignite Fabric binary distribution:
-IGNITE_HOME=.../apache-ignite-fabric-1.7.0-SNAPSHOT-bin
-
+HIVE_HOME=/opt/1964/apache-hive-1.2.1-bin
+IGNITE_HOME=/opt/1964/gridgain-professional-fabric-1.6.5
+HADOOP_HOME=/opt/4ibm/hadoop-2.7.1
 
 # clean up output folder:
 ${HADOOP_HOME}/bin/hadoop fs -rm -r /tmp/ignite-hive-loader-out || true
@@ -42,9 +24,16 @@ done
 
 export HADOOP_CLASSPATH=`echo "${LIBJARS}" | tr ',' ':'`
 
-${HADOOP_HOME}/bin/yarn jar target/ignite-hive-loader-1.0.0-SNAPSHOT.jar com.atconsulting.ignitehiveloader.OrcLoader \
+
+${HADOOP_HOME}/bin/yarn jar ./target/ignite-hive-loader-1.0.0-SNAPSHOT.jar com.atconsulting.ignitehiveloader.OrcLoader \
 -libjars "${LIBJARS}" \
--Dignite-client-config-path=${ignite_config} \
--Dignite-cache-name=${cache_name} \
- "${@}" /tmp/ignite-hive-loader-out
-   
+-Dignite.orc.input=hdfs://testagent06:9000/user/hive/warehouse/cha_min_orc_1g/ \
+-Dignite.orc.output=/tmp/ignite-hive-loader-out \
+-Dignite.orc.config_path=/mnt/nfsshare01/share/default-config.xml \
+-Dignite.orc.cache_name=mycache \
+-Dignite.orc.clear_cache=true \
+-Dignite.orc.buffer_size=4096 \
+-Dignite.orc.concurrency=48 \
+-Dignite.orc.filter.current_day=false \
+ "${@}"
+

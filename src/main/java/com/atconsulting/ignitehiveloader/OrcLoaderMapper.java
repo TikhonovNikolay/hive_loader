@@ -111,7 +111,7 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
     @Override protected void setup(Context context) throws IOException, InterruptedException {
         ctrId = Integer.toString(context.getTaskAttemptID().getTaskID().getId());
 
-        startTime = System.currentTimeMillis();
+        startTime = System.nanoTime();
 
         // Check config parameters.
         Configuration conf = context.getConfiguration();
@@ -312,7 +312,7 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
      * @return Counter.
      */
     private Counter counter(Context ctx, String name) {
-        String name0 = ctrId + "." + name;
+        String name0 = name + "." + ctrId;
 
         return ctx.getCounter(CTR_GRP, name0);
     }
