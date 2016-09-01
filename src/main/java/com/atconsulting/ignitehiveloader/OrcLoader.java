@@ -63,7 +63,7 @@ public class OrcLoader {
 
         String cacheName = conf.get(OrcLoaderProperties.PROP_CACHE_NAME);
 
-        boolean clearCache = conf.getBoolean(OrcLoaderProperties.PROP_CLEAR_CACHE, false);
+        conf.getEnum(OrcLoaderProperties.PROP_MODE, OrcLoaderMode.STREAMER);
 
         int bufSize = conf.getInt(OrcLoaderProperties.PROP_BUFFER_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
 
@@ -75,19 +75,19 @@ public class OrcLoader {
         if (concurrency <= 0)
             throw new IllegalArgumentException("Parallel ops must be positive: " + concurrency);
 
+        // Print properties to verify what was passed to runner.
         printProperty(conf, OrcLoaderProperties.PROP_INPUT);
         printProperty(conf, OrcLoaderProperties.PROP_OUTPUT);
         printProperty(conf, OrcLoaderProperties.PROP_CONFIG_PATH);
         printProperty(conf, OrcLoaderProperties.PROP_CACHE_NAME);
+        printProperty(conf, OrcLoaderProperties.PROP_MODE);
         printProperty(conf, OrcLoaderProperties.PROP_BUFFER_SIZE);
         printProperty(conf, OrcLoaderProperties.PROP_PARALLEL_OPS);
-        printProperty(conf, OrcLoaderProperties.PROP_USE_PUT);
         printProperty(conf, OrcLoaderProperties.PROP_CLEAR_CACHE);
-        printProperty(conf, OrcLoaderProperties.PROP_SKIP_CACHE);
         printProperty(conf, OrcLoaderProperties.PROP_FILTER_CURRENT_DAY);
 
         // Clear cache if needed.
-        if (clearCache)
+        if (conf.getBoolean(OrcLoaderProperties.PROP_CLEAR_CACHE, false))
             clearCache(cfgPath, cacheName);
 
         // Prepare job.

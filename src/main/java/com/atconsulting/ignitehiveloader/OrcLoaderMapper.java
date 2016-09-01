@@ -82,11 +82,8 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
     /** Total parallel ops (parallelOps * node count) */
     private int totalParallelOps;
 
-    /** Whether put should be used instead of streamer. */
-    private boolean usePut;
-
-    /** Whether data should not be put to cache. */
-    private boolean skipCache;
+    /** Loader mode. */
+    private OrcLoaderMode mode;
 
     /** Whether only current day should be loaded. */
     private boolean filterCurDay;
@@ -142,8 +139,8 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
         if (parallelOps <= 0)
             throw new IllegalArgumentException("Parallel ops must be positive: " + parallelOps);
 
-        usePut = conf.getBoolean(OrcLoaderProperties.PROP_USE_PUT, false);
-        skipCache = conf.getBoolean(OrcLoaderProperties.PROP_SKIP_CACHE, false);
+        mode = conf.getEnum(OrcLoaderProperties.PROP_MODE, OrcLoaderMode.STREAMER);
+
         filterCurDay = conf.getBoolean(OrcLoaderProperties.PROP_FILTER_CURRENT_DAY, false);
 
         // Start Ignite client.
@@ -196,7 +193,11 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
     @Override protected void cleanup(Context ctx) throws IOException, InterruptedException {
         long cleanupStartTime = System.nanoTime();
 
-        if (usePut) {
+        if (mode == OrcLoaderMode.STREAMER || mode == OrcLoaderMode.STREAMER_BATCHED) {
+            streamer.flush();
+            streamer.close();
+        }
+        else if (mode == OrcLoaderMode.PUT) {
             // Send remaining buffers.
             for (Map<CHA.Key, CHA> buf : bufPerNodeId.values())
                 sendBuffer(buf);
@@ -209,10 +210,6 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
                 if (putErr != null)
                     throw new IgniteException("An error ocurred during put operation.", putErr);
             }
-        }
-        else {
-            streamer.flush();
-            streamer.close();
         }
 
         ctrAddDur += System.nanoTime() - cleanupStartTime;
@@ -242,10 +239,11 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
         if (filterCurDay && !currentDay(val.getPutTimestamp()))
             return false;
 
-        if (skipCache)
+        if (mode == OrcLoaderMode.SKIP)
             return true;
-
-        if (usePut) {
+        else if (mode == OrcLoaderMode.STREAMER)
+            streamer.addData(key, val);
+        else {
             // Get affinity node.
             ClusterNode node = aff.mapKeyToNode(key.getSubscriberId());
 
@@ -272,8 +270,6 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
                 bufPerNodeId.remove(nodeId);
             }
         }
-        else
-            streamer.addData(key, val);
 
         return true;
     }
@@ -284,48 +280,52 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
      * @param buf Buffer.
      */
     private void sendBuffer(Map<CHA.Key, CHA> buf) {
-        // Obtain permit.
-        try {
-            synchronized (mux) {
-                while (curParallelOps >= totalParallelOps)
-                    mux.wait();
-
-                curParallelOps++;
-            }
-        }
-        catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-
-            throw new IgniteException("Failed to wait for asynchronous operation permit.");
-        }
-
-        // Perform put.
-        cache.putAll(buf);
-
-        IgniteFuture<Void> fut = cache.future();
-
-        // Decrease parallel ops count when put is completed.
-        fut.listen(new IgniteInClosure<IgniteFuture>() {
-            @Override public void apply(IgniteFuture fut0) {
-                Exception err = null;
-
-                try {
-                    fut0.get();
-                }
-                catch (Exception e) {
-                    err = e;
-                }
-
+        if (mode == OrcLoaderMode.STREAMER_BATCHED)
+            streamer.addData(buf);
+        else {
+            // Obtain permit.
+            try {
                 synchronized (mux) {
-                    if (err != null && putErr == null)
-                        putErr = err;
+                    while (curParallelOps >= totalParallelOps)
+                        mux.wait();
 
-                    curParallelOps--;
-
-                    mux.notifyAll();
+                    curParallelOps++;
                 }
             }
-        });
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+
+                throw new IgniteException("Failed to wait for asynchronous operation permit.");
+            }
+
+            // Perform put.
+            cache.putAll(buf);
+
+            IgniteFuture<Void> fut = cache.future();
+
+            // Decrease parallel ops count when put is completed.
+            fut.listen(new IgniteInClosure<IgniteFuture>() {
+                @Override public void apply(IgniteFuture fut0) {
+                    Exception err = null;
+
+                    try {
+                        fut0.get();
+                    }
+                    catch (Exception e) {
+                        err = e;
+                    }
+
+                    synchronized (mux) {
+                        if (err != null && putErr == null)
+                            putErr = err;
+
+                        curParallelOps--;
+
+                        mux.notifyAll();
+                    }
+                }
+            });
+        }
     }
 
     /**
