@@ -49,6 +49,7 @@ public class DirectOrcLoaderRunner {
             throw new IllegalArgumentException("Mode is not supported: " + mode);
 
         boolean jobPerFile = Boolean.getBoolean(OrcLoaderProperties.JOB_PER_FILE);
+        boolean filterCurDay = Boolean.getBoolean(OrcLoaderProperties.FILTER_CURRENT_DAY);
 
         Ignition.setClientMode(true);
 
@@ -57,7 +58,7 @@ public class DirectOrcLoaderRunner {
                 clearCache(ignite, cacheName);
 
             DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, parallelOps, mode, jobPerFile,
-                ignite.cluster().localNode());
+                filterCurDay, ignite.cluster().localNode());
 
             System.out.println(">>> Starting ORC load task: " + task);
 

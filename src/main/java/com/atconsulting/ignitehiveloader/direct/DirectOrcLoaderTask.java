@@ -1,6 +1,7 @@
 package com.atconsulting.ignitehiveloader.direct;
 
 import com.atconsulting.ignitehiveloader.OrcLoaderMode;
+import com.atconsulting.ignitehiveloader.filter.OrcLoaderSameDayFilter;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -45,6 +46,9 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
     /** Whether single job should be created for a file. */
     private final boolean jobPerFile;
 
+    /** Whether to load current day only. */
+    private final boolean filterCurDay;
+
     /** Local node. */
     @GridToStringExclude
     private final ClusterNode locNode;
@@ -58,16 +62,18 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @param parallelOps Parallel operations.
      * @param mode Load mode.
      * @param jobPerFile Whether single job should be created for a file.
+     * @param filterCurDay Whether to load current day only.
      * @param locNode Local node.
      */
     public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, int parallelOps, OrcLoaderMode mode,
-        boolean jobPerFile, ClusterNode locNode) {
+        boolean jobPerFile, boolean filterCurDay, ClusterNode locNode) {
         this.pathStr = pathStr;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
         this.parallelOps = parallelOps;
         this.mode = mode;
         this.jobPerFile = jobPerFile;
+        this.filterCurDay = filterCurDay;
         this.locNode = locNode;
     }
 
@@ -259,7 +265,8 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
         for (int i = 0; i < files.size(); i++)
             paths[i] = files.get(i).getPath().toString();
 
-        return new DirectOrcLoaderJob(paths, cacheName, bufSize, parallelOps, mode);
+        return new DirectOrcLoaderJob(paths, cacheName, bufSize, parallelOps, mode,
+            filterCurDay ? new OrcLoaderSameDayFilter() : null);
     }
 
     /** {@inheritDoc} */
