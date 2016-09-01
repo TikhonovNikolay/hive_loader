@@ -116,26 +116,26 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
         // Check config parameters.
         Configuration conf = context.getConfiguration();
 
-        String cfgPath = conf.get(OrcLoaderProperties.PROP_CONFIG_PATH);
+        String cfgPath = conf.get(OrcLoaderProperties.CONFIG_PATH);
 
         if (cfgPath == null)
             throw new IllegalArgumentException("Path to Ignite XML configuration is not specified.");
 
-        String cacheName = conf.get(OrcLoaderProperties.PROP_CACHE_NAME);
+        String cacheName = conf.get(OrcLoaderProperties.CACHE_NAME);
 
-        bufSize = conf.getInt(OrcLoaderProperties.PROP_BUFFER_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
+        bufSize = conf.getInt(OrcLoaderProperties.BUFFER_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
 
         if (bufSize <= 0)
             throw new IllegalArgumentException("Buffer size cannot be negative: " + bufSize);
 
-        int parallelOps = conf.getInt(OrcLoaderProperties.PROP_PARALLEL_OPS, IgniteDataStreamer.DFLT_MAX_PARALLEL_OPS);
+        int parallelOps = conf.getInt(OrcLoaderProperties.PARALLEL_OPS, IgniteDataStreamer.DFLT_MAX_PARALLEL_OPS);
 
         if (parallelOps <= 0)
             throw new IllegalArgumentException("Parallel ops must be positive: " + parallelOps);
 
-        mode = conf.getEnum(OrcLoaderProperties.PROP_MODE, OrcLoaderMode.STREAMER);
+        mode = conf.getEnum(OrcLoaderProperties.MODE, OrcLoaderMode.STREAMER);
 
-        filterCurDay = conf.getBoolean(OrcLoaderProperties.PROP_FILTER_CURRENT_DAY, false);
+        filterCurDay = conf.getBoolean(OrcLoaderProperties.FILTER_CURRENT_DAY, false);
 
         // Start Ignite client.
         Ignition.setClientMode(true);

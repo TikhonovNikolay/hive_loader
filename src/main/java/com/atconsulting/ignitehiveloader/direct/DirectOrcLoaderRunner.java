@@ -1,5 +1,6 @@
 package com.atconsulting.ignitehiveloader.direct;
 
+import com.atconsulting.ignitehiveloader.OrcLoaderProperties;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCompute;
 import org.apache.ignite.IgniteDataStreamer;
@@ -9,19 +10,7 @@ import org.apache.ignite.Ignition;
  * Runner for direct ORC loader.
  */
 public class DirectOrcLoaderRunner {
-    /** Path to ORC folder. */
-    private static final String PROP_PATH = "ignite.orc.path";
-
-    /** Path to XML configuration. */
-    private static final String PROP_CFG_PATH = "ignite.orc.config_path";
-
-    /** Cache name. */
-    private static final String PROP_CACHE_NAME = "ignite.orc.cache_name";
-
-    /** Buffer size. */
-    private static final String PROP_BUF_SIZE = "ignite.orc.buf_size";
-
-    /** Load mode. */
+        /** Load mode. */
     private static final String PROP_MODE = "ignite.orc.mode";
 
     /** Skip cache flag. */
@@ -31,19 +20,19 @@ public class DirectOrcLoaderRunner {
      * Entry point.
      */
     public static void main(String[] args) {
-        String path = System.getProperty(PROP_PATH);
+        String path = System.getProperty(OrcLoaderProperties.INPUT);
 
         if (path == null)
             throw new IllegalArgumentException("Path is not specified.");
 
-        String cfgPath = System.getProperty(PROP_CFG_PATH);
+        String cfgPath = System.getProperty(OrcLoaderProperties.CONFIG_PATH);
 
         if (cfgPath == null)
             throw new IllegalArgumentException("Config path is not specified.");
 
-        String cacheName = System.getProperty(PROP_CACHE_NAME);
+        String cacheName = System.getProperty(OrcLoaderProperties.CACHE_NAME);
 
-        int bufSize = Integer.getInteger(PROP_BUF_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
+        int bufSize = Integer.getInteger(OrcLoaderProperties.BUFFER_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
 
         String modeStr = System.getProperty(PROP_MODE);
 

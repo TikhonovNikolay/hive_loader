@@ -3,33 +3,33 @@ package com.atconsulting.ignitehiveloader;
 /**
  * ORC loader properties.
  */
-class OrcLoaderProperties {
+public class OrcLoaderProperties {
     /** Path to a directory with ORC files. */
-    static final String PROP_INPUT = "ignite.orc.input";
+    public static final String INPUT = "ignite.orc.input";
 
     /** Output directory. */
-    static final String PROP_OUTPUT = "ignite.orc.output";
+    public static final String OUTPUT = "ignite.orc.output";
 
     /** Property: path to XML configuration. */
-    static final String PROP_CONFIG_PATH = "ignite.orc.config_path";
+    public static final String CONFIG_PATH = "ignite.orc.config_path";
 
     /** Property: cache name. */
-    static final String PROP_CACHE_NAME = "ignite.orc.cache_name";
+    public static final String CACHE_NAME = "ignite.orc.cache_name";
 
     /** Property: load mode. */
-    static final String PROP_MODE = "ignite.orc.mode";
+    public static final String MODE = "ignite.orc.mode";
 
     /** Property: per-node buffer size. */
-    static final String PROP_BUFFER_SIZE = "ignite.orc.buffer_size";
+    public static final String BUFFER_SIZE = "ignite.orc.buffer_size";
 
     /** Property: per-node parallel operations count. */
-    static final String PROP_PARALLEL_OPS = "ignite.orc.parallel_ops";
+    public static final String PARALLEL_OPS = "ignite.orc.parallel_ops";
 
     /** Whether cache must be cleared. */
-    static final String PROP_CLEAR_CACHE = "ignite.orc.clear_cache";
+    public static final String CLEAR_CACHE = "ignite.orc.clear_cache";
 
     /** Property: whether onl current day events should be loaded. */
-    static final String PROP_FILTER_CURRENT_DAY = "ignite.orc.filter.current_day";
+    public static final String FILTER_CURRENT_DAY = "ignite.orc.filter.current_day";
 
     /**
      * Constructor.

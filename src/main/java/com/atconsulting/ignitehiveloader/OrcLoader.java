@@ -43,51 +43,51 @@ public class OrcLoader {
         new GenericOptionsParser(conf, args).getRemainingArgs();
 
         // Get job parameters.
-        String input = conf.get(OrcLoaderProperties.PROP_INPUT);
+        String input = conf.get(OrcLoaderProperties.INPUT);
 
         if (input == null)
             throw new IllegalArgumentException("Input path is not specified " +
-                "(set " + OrcLoaderProperties.PROP_INPUT + " property).");
+                "(set " + OrcLoaderProperties.INPUT + " property).");
 
-        String output = conf.get(OrcLoaderProperties.PROP_OUTPUT);
+        String output = conf.get(OrcLoaderProperties.OUTPUT);
 
         if (output == null)
             throw new IllegalArgumentException("Output path is not specified " +
-                "(set " + OrcLoaderProperties.PROP_OUTPUT + " property).");
+                "(set " + OrcLoaderProperties.OUTPUT + " property).");
 
-        String cfgPath = conf.get(OrcLoaderProperties.PROP_CONFIG_PATH);
+        String cfgPath = conf.get(OrcLoaderProperties.CONFIG_PATH);
 
         if (cfgPath == null)
             throw new IllegalArgumentException("Path to Ignite XML configuration is not specified " +
-                "(set " + OrcLoaderProperties.PROP_CONFIG_PATH + " property).");
+                "(set " + OrcLoaderProperties.CONFIG_PATH + " property).");
 
-        String cacheName = conf.get(OrcLoaderProperties.PROP_CACHE_NAME);
+        String cacheName = conf.get(OrcLoaderProperties.CACHE_NAME);
 
-        conf.getEnum(OrcLoaderProperties.PROP_MODE, OrcLoaderMode.STREAMER);
+        conf.getEnum(OrcLoaderProperties.MODE, OrcLoaderMode.STREAMER);
 
-        int bufSize = conf.getInt(OrcLoaderProperties.PROP_BUFFER_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
+        int bufSize = conf.getInt(OrcLoaderProperties.BUFFER_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
 
         if (bufSize <= 0)
             throw new IllegalArgumentException("Buffer size must be positive: " + bufSize);
 
-        int concurrency = conf.getInt(OrcLoaderProperties.PROP_PARALLEL_OPS, IgniteDataStreamer.DFLT_MAX_PARALLEL_OPS);
+        int concurrency = conf.getInt(OrcLoaderProperties.PARALLEL_OPS, IgniteDataStreamer.DFLT_MAX_PARALLEL_OPS);
 
         if (concurrency <= 0)
             throw new IllegalArgumentException("Parallel ops must be positive: " + concurrency);
 
         // Print properties to verify what was passed to runner.
-        printProperty(conf, OrcLoaderProperties.PROP_INPUT);
-        printProperty(conf, OrcLoaderProperties.PROP_OUTPUT);
-        printProperty(conf, OrcLoaderProperties.PROP_CONFIG_PATH);
-        printProperty(conf, OrcLoaderProperties.PROP_CACHE_NAME);
-        printProperty(conf, OrcLoaderProperties.PROP_MODE);
-        printProperty(conf, OrcLoaderProperties.PROP_BUFFER_SIZE);
-        printProperty(conf, OrcLoaderProperties.PROP_PARALLEL_OPS);
-        printProperty(conf, OrcLoaderProperties.PROP_CLEAR_CACHE);
-        printProperty(conf, OrcLoaderProperties.PROP_FILTER_CURRENT_DAY);
+        printProperty(conf, OrcLoaderProperties.INPUT);
+        printProperty(conf, OrcLoaderProperties.OUTPUT);
+        printProperty(conf, OrcLoaderProperties.CONFIG_PATH);
+        printProperty(conf, OrcLoaderProperties.CACHE_NAME);
+        printProperty(conf, OrcLoaderProperties.MODE);
+        printProperty(conf, OrcLoaderProperties.BUFFER_SIZE);
+        printProperty(conf, OrcLoaderProperties.PARALLEL_OPS);
+        printProperty(conf, OrcLoaderProperties.CLEAR_CACHE);
+        printProperty(conf, OrcLoaderProperties.FILTER_CURRENT_DAY);
 
         // Clear cache if needed.
-        if (conf.getBoolean(OrcLoaderProperties.PROP_CLEAR_CACHE, false))
+        if (conf.getBoolean(OrcLoaderProperties.CLEAR_CACHE, false))
             clearCache(cfgPath, cacheName);
 
         // Prepare job.
