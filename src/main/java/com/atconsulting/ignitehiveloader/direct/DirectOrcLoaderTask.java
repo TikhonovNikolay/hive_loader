@@ -10,10 +10,12 @@ import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.compute.ComputeJob;
 import org.apache.ignite.compute.ComputeJobResult;
 import org.apache.ignite.compute.ComputeTaskAdapter;
+import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -39,6 +41,10 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
     /** Load mode. */
     private final OrcLoaderMode mode;
 
+    /** Local node. */
+    @GridToStringExclude
+    private final ClusterNode locNode;
+
     /**
      * Constructor.
      *
@@ -47,19 +53,30 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @param bufSize Buffer size.
      * @param parallelOps Parallel operations.
      * @param mode Load mode.
+     * @param locNode Local node.
      */
-    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, int parallelOps, OrcLoaderMode mode) {
+    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, int parallelOps, OrcLoaderMode mode,
+        ClusterNode locNode) {
         this.pathStr = pathStr;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
         this.parallelOps = parallelOps;
         this.mode = mode;
+        this.locNode = locNode;
     }
 
     /** {@inheritDoc} */
     @SuppressWarnings("ConstantConditions")
     @Nullable @Override public Map<? extends ComputeJob, ClusterNode> map(
         List<ClusterNode> nodes, @Nullable String arg) throws IgniteException {
+        // Exclude local node.
+        List<ClusterNode> nodes0 = new ArrayList<>(nodes.size() - 1);
+
+        for (ClusterNode node : nodes) {
+            if (!F.eq(node.id(), locNode.id()))
+                nodes0.add(node);
+        }
+
         Map<ComputeJob, ClusterNode> jobs = new HashMap<>();
 
         Path path = new Path(pathStr);
@@ -70,11 +87,11 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
 
         Map<ClusterNode, Integer> nodeCtrs = new HashMap<>();
 
-        for (ClusterNode node : nodes)
+        for (ClusterNode node : nodes0)
             nodeCtrs.put(node, 0);
 
         for (FileStatus file : files) {
-            ClusterNode node = nodeForFile(fs, file, nodes, nodeCtrs);
+            ClusterNode node = nodeForFile(fs, file, nodes0, nodeCtrs);
 
             ComputeJob job = jobForFiles(file);
 

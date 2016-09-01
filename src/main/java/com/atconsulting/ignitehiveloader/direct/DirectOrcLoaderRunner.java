@@ -53,11 +53,12 @@ public class DirectOrcLoaderRunner {
         try (Ignite ignite = Ignition.start(cfgPath)) {
             clearCache(ignite, cacheName);
 
-            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, parallelOps, mode);
+            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, parallelOps, mode,
+                ignite.cluster().localNode());
 
             System.out.println(">>> Starting ORC load task: " + task);
 
-            IgniteCompute compute = ignite.compute(ignite.cluster().forDataNodes(cacheName));
+            IgniteCompute compute = ignite.compute(ignite.cluster().forClients());
 
             long startTime = System.nanoTime();
 
