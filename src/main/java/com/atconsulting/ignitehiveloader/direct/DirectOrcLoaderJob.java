@@ -3,6 +3,7 @@ package com.atconsulting.ignitehiveloader.direct;
 import com.atconsulting.ignitehiveloader.CHA;
 import com.atconsulting.ignitehiveloader.OrcLoaderMode;
 import com.atconsulting.ignitehiveloader.OrcLoaderUtils;
+import com.atconsulting.ignitehiveloader.filter.OrcLoaderFilter;
 import org.apache.hadoop.hive.ql.io.orc.OrcStruct;
 import org.apache.hadoop.hive.ql.io.orc.Reader;
 import org.apache.hadoop.hive.ql.io.orc.RecordReader;
@@ -34,6 +35,9 @@ public class DirectOrcLoaderJob implements ComputeJob {
     /** Load mode. */
     private OrcLoaderMode mode;
 
+    /** Optional filter. */
+    private OrcLoaderFilter filter;
+
     /** Injected Ignite instance. */
     @IgniteInstanceResource
     @GridToStringExclude
@@ -54,13 +58,16 @@ public class DirectOrcLoaderJob implements ComputeJob {
      * @param bufSize Buffer size.
      * @param parallelOps Parallel operations.
      * @param mode Load mode.
+     * @param filter Optional filter.
      */
-    public DirectOrcLoaderJob(String[] paths, String cacheName, int bufSize, int parallelOps, OrcLoaderMode mode) {
+    public DirectOrcLoaderJob(String[] paths, String cacheName, int bufSize, int parallelOps, OrcLoaderMode mode,
+        OrcLoaderFilter filter) {
         this.paths = paths;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
         this.parallelOps = parallelOps;
         this.mode = mode;
+        this.filter = filter;
     }
 
     /** {@inheritDoc} */
@@ -71,7 +78,7 @@ public class DirectOrcLoaderJob implements ComputeJob {
 
         long startTime = System.currentTimeMillis();
 
-        try (IgniteDataStreamer<Object, CHA> streamer = ignite.dataStreamer(cacheName)) {
+        try (IgniteDataStreamer<CHA.Key, CHA> streamer = ignite.dataStreamer(cacheName)) {
             streamer.perNodeBufferSize(bufSize);
             streamer.perNodeParallelOperations(parallelOps);
 
@@ -113,7 +120,7 @@ public class DirectOrcLoaderJob implements ComputeJob {
      * @param skip Skip flag.
      * @return Amount of loaded key-value pairs.
      */
-    private long readAndLoad(IgniteDataStreamer<Object, CHA> streamer, Reader reader, StructObjectInspector inspector,
+    private long readAndLoad(IgniteDataStreamer<CHA.Key, CHA> streamer, Reader reader, StructObjectInspector inspector,
         boolean skip) {
         long cnt = 0;
 
@@ -125,13 +132,15 @@ public class DirectOrcLoaderJob implements ComputeJob {
             while (rows.hasNext()) {
                 row = (OrcStruct) rows.next(row);
 
-                Object key = OrcLoaderUtils.structToKey(row, inspector);
+                CHA.Key key = OrcLoaderUtils.structToKey(row, inspector);
                 CHA val = OrcLoaderUtils.structToValue(row, inspector);
 
-                if (!skip)
-                    streamer.addData(key, val);
+                if (filter == null || filter.evaluate(key, val)) {
+                    if (!skip)
+                        streamer.addData(key, val);
 
-                cnt++;
+                    cnt++;
+                }
             }
         }
         catch (Exception e) {
