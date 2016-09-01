@@ -32,7 +32,7 @@ public class OrcLoaderProperties {
     public static final String FILTER_CURRENT_DAY = "ignite.orc.filter.current_day";
 
     /** Property: whether separate job should be created for each file. */
-    public static final String JOB_PER_FILE = "ignite.orc.filter.job_per_file";
+    public static final String JOB_PER_FILE = "ignite.orc.job_per_file";
 
     /**
      * Constructor.
