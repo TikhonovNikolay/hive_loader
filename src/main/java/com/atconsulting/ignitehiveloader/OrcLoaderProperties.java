@@ -28,8 +28,11 @@ public class OrcLoaderProperties {
     /** Whether cache must be cleared. */
     public static final String CLEAR_CACHE = "ignite.orc.clear_cache";
 
-    /** Property: whether onl current day events should be loaded. */
+    /** Property: whether only current day events should be loaded. */
     public static final String FILTER_CURRENT_DAY = "ignite.orc.filter.current_day";
+
+    /** Property: whether separate job should be created for each file. */
+    public static final String JOB_PER_FILE = "ignite.orc.filter.job_per_file";
 
     /**
      * Constructor.

@@ -48,12 +48,14 @@ public class DirectOrcLoaderRunner {
         if (mode == OrcLoaderMode.STREAMER_BATCHED || mode == OrcLoaderMode.PUT)
             throw new IllegalArgumentException("Mode is not supported: " + mode);
 
+        boolean jobPerFile = Boolean.getBoolean(OrcLoaderProperties.JOB_PER_FILE);
+
         Ignition.setClientMode(true);
 
         try (Ignite ignite = Ignition.start(cfgPath)) {
             clearCache(ignite, cacheName);
 
-            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, parallelOps, mode,
+            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, parallelOps, mode, jobPerFile,
                 ignite.cluster().localNode());
 
             System.out.println(">>> Starting ORC load task: " + task);

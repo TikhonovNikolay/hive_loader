@@ -17,6 +17,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -41,6 +42,9 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
     /** Load mode. */
     private final OrcLoaderMode mode;
 
+    /** Whether single job should be created for a file. */
+    private final boolean jobPerFile;
+
     /** Local node. */
     @GridToStringExclude
     private final ClusterNode locNode;
@@ -53,15 +57,17 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @param bufSize Buffer size.
      * @param parallelOps Parallel operations.
      * @param mode Load mode.
+     * @param jobPerFile Whether single job should be created for a file.
      * @param locNode Local node.
      */
     public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, int parallelOps, OrcLoaderMode mode,
-        ClusterNode locNode) {
+        boolean jobPerFile, ClusterNode locNode) {
         this.pathStr = pathStr;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
         this.parallelOps = parallelOps;
         this.mode = mode;
+        this.jobPerFile = jobPerFile;
         this.locNode = locNode;
     }
 
@@ -90,14 +96,39 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
         for (ClusterNode node : nodes0)
             nodeCtrs.put(node, 0);
 
+        Map<ClusterNode, List<FileStatus>> nodeToFiles = new HashMap<>();
+
         for (FileStatus file : files) {
             ClusterNode node = nodeForFile(fs, file, nodes0, nodeCtrs);
 
-            ComputeJob job = jobForFiles(file);
+            List<FileStatus> nodeFiles = nodeToFiles.get(node);
 
-            jobs.put(job, node);
+            if (nodeFiles == null) {
+                nodeFiles = new ArrayList<>();
+
+                nodeToFiles.put(node, nodeFiles);
+            }
+
+            nodeFiles.add(file);
 
             nodeCtrs.put(node, nodeCtrs.get(node) + 1);
+        }
+
+        for (ClusterNode node : nodeToFiles.keySet()) {
+            List<FileStatus> nodeFiles = nodeToFiles.get(node);
+
+            if (jobPerFile) {
+                for (FileStatus nodeFile : nodeFiles) {
+                    ComputeJob job = jobForFiles(Collections.singletonList(nodeFile));
+
+                    jobs.put(job, node);
+                }
+            }
+            else {
+                ComputeJob job = jobForFiles(nodeFiles);
+
+                jobs.put(job, node);
+            }
         }
 
         return jobs;
@@ -222,11 +253,11 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @param files Files.
      * @return Job.
      */
-    private DirectOrcLoaderJob jobForFiles(FileStatus... files) {
-        String[] paths = new String[files.length];
+    private DirectOrcLoaderJob jobForFiles(List<FileStatus> files) {
+        String[] paths = new String[files.size()];
 
-        for (int i = 0; i < files.length; i++)
-            paths[i] = files[i].getPath().toString();
+        for (int i = 0; i < files.size(); i++)
+            paths[i] = files.get(i).getPath().toString();
 
         return new DirectOrcLoaderJob(paths, cacheName, bufSize, parallelOps, mode);
     }
