@@ -14,7 +14,12 @@ import org.apache.ignite.IgniteException;
 import org.apache.ignite.compute.ComputeJob;
 import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.typedef.internal.S;
+import org.apache.ignite.lang.IgniteBiTuple;
 import org.apache.ignite.resources.IgniteInstanceResource;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Ignite job to load a file into Ignite.
@@ -88,13 +93,18 @@ public class DirectOrcLoaderJob implements ComputeJob {
                 StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
 
                 switch (mode) {
+                    case SKIP:
+                        cnt += readAndLoad(streamer, reader, inspector, true);
+
+                        break;
+
                     case STREAMER:
                         cnt += readAndLoad(streamer, reader, inspector, false);
 
                         break;
 
-                    case SKIP:
-                        cnt += readAndLoad(streamer, reader, inspector, true);
+                    case STREAMER_BATCHED:
+                        cnt += readAndLoadBatched(streamer, reader, inspector);
 
                         break;
 
@@ -112,7 +122,55 @@ public class DirectOrcLoaderJob implements ComputeJob {
     }
 
     /**
-     * Read and load keys optionally changing their affinity to match local node.
+     * Read and load keys batching them into separate buffer before passing to streamer.
+     *
+     * @param streamer Cache streamer.
+     * @param reader Reader.
+     * @param inspector Inspector.
+     * @return Amount of loaded key-value pairs.
+     */
+    private long readAndLoadBatched(IgniteDataStreamer<CHA.Key, CHA> streamer, Reader reader,
+        StructObjectInspector inspector) {
+        long cnt = 0;
+
+        List<Map.Entry<CHA.Key, CHA>> buf = new ArrayList<>(bufSize);
+
+        try {
+            RecordReader rows = reader.rows();
+
+            OrcStruct row = null;
+
+            while (rows.hasNext()) {
+                row = (OrcStruct) rows.next(row);
+
+                CHA.Key key = OrcLoaderUtils.structToKey(row, inspector);
+                CHA val = OrcLoaderUtils.structToValue(row, inspector);
+
+                if (filter == null || filter.evaluate(key, val)) {
+                    buf.add(new IgniteBiTuple<>(key, val));
+
+                    if (buf.size() == bufSize) {
+                        streamer.addData(buf);
+
+                        buf = new ArrayList<>(bufSize);
+                    }
+
+                    cnt++;
+                }
+            }
+
+            if (!buf.isEmpty())
+                streamer.addData(buf);
+        }
+        catch (Exception e) {
+            throw new IgniteException("Failed to load ORC data to cache.", e);
+        }
+
+        return cnt;
+    }
+
+    /**
+     * Read and load keys.
      *
      * @param streamer Cache streamer.
      * @param reader Reader.

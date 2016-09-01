@@ -45,7 +45,7 @@ public class DirectOrcLoaderRunner {
 
         OrcLoaderMode mode = OrcLoaderMode.valueOf(modeStr);
 
-        if (mode == OrcLoaderMode.STREAMER_BATCHED || mode == OrcLoaderMode.PUT)
+        if (mode == OrcLoaderMode.PUT)
             throw new IllegalArgumentException("Mode is not supported: " + mode);
 
         boolean jobPerFile = Boolean.getBoolean(OrcLoaderProperties.JOB_PER_FILE);
