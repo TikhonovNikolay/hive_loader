@@ -1,5 +1,6 @@
 package com.atconsulting.ignitehiveloader.direct;
 
+import com.atconsulting.ignitehiveloader.OrcLoaderMode;
 import com.atconsulting.ignitehiveloader.OrcLoaderProperties;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCompute;
@@ -10,12 +11,6 @@ import org.apache.ignite.Ignition;
  * Runner for direct ORC loader.
  */
 public class DirectOrcLoaderRunner {
-        /** Load mode. */
-    private static final String PROP_MODE = "ignite.orc.mode";
-
-    /** Skip cache flag. */
-    private static final String PROP_SKIP_CACHE = "ignite.orc.skip_cache";
-
     /**
      * Entry point.
      */
@@ -34,21 +29,31 @@ public class DirectOrcLoaderRunner {
 
         int bufSize = Integer.getInteger(OrcLoaderProperties.BUFFER_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
 
-        String modeStr = System.getProperty(PROP_MODE);
+        if (bufSize <= 0)
+            throw new IllegalArgumentException("Buffer size must be positive.");
+
+        int parallelOps = Integer.getInteger(OrcLoaderProperties.PARALLEL_OPS,
+            IgniteDataStreamer.DFLT_MAX_PARALLEL_OPS);
+
+        if (parallelOps <= 0)
+            throw new IllegalArgumentException("Parallel ops size must be positive.");
+
+        String modeStr = System.getProperty(OrcLoaderProperties.MODE);
 
         if (modeStr == null)
             throw new IllegalArgumentException("Mode is not specified.");
 
-        DirectOrcLoaderMode mode = DirectOrcLoaderMode.valueOf(modeStr);
+        OrcLoaderMode mode = OrcLoaderMode.valueOf(modeStr);
 
-        boolean skipCache = Boolean.getBoolean(PROP_SKIP_CACHE);
+        if (mode == OrcLoaderMode.STREAMER_BATCHED || mode == OrcLoaderMode.PUT)
+            throw new IllegalArgumentException("Mode is not supported: " + mode);
 
         Ignition.setClientMode(true);
 
         try (Ignite ignite = Ignition.start(cfgPath)) {
             clearCache(ignite, cacheName);
 
-            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, mode, skipCache);
+            DirectOrcLoaderTask task = new DirectOrcLoaderTask(path, cacheName, bufSize, parallelOps, mode);
 
             System.out.println(">>> Starting ORC load task: " + task);
 

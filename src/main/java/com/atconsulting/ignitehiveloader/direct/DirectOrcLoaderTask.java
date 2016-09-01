@@ -1,5 +1,6 @@
 package com.atconsulting.ignitehiveloader.direct;
 
+import com.atconsulting.ignitehiveloader.OrcLoaderMode;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -32,11 +33,11 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
     /** Buffer size. */
     private final int bufSize;
 
-    /** Load mode. */
-    private final DirectOrcLoaderMode mode;
+    /** Parallel operations. */
+    private final int parallelOps;
 
-    /** Skip cache flag. */
-    private final boolean skipCache;
+    /** Load mode. */
+    private final OrcLoaderMode mode;
 
     /**
      * Constructor.
@@ -44,16 +45,15 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
      * @param pathStr Path to ORC files.
      * @param cacheName Cache name.
      * @param bufSize Buffer size.
+     * @param parallelOps Parallel operations.
      * @param mode Load mode.
-     * @param skipCache Skip cache flag.
      */
-    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, DirectOrcLoaderMode mode,
-        boolean skipCache) {
+    public DirectOrcLoaderTask(String pathStr, String cacheName, int bufSize, int parallelOps, OrcLoaderMode mode) {
         this.pathStr = pathStr;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
+        this.parallelOps = parallelOps;
         this.mode = mode;
-        this.skipCache = skipCache;
     }
 
     /** {@inheritDoc} */
@@ -68,31 +68,19 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
 
         FileStatus[] files = DirectOrcLoaderUtils.enumerateFiles(fs, path);
 
-        if (mode == DirectOrcLoaderMode.LOCAL_KEYS) {
-            // Every node will process every file, but will load only primary keys.
-            for (FileStatus file : files) {
-                for (ClusterNode node : nodes) {
-                    ComputeJob job = jobForFiles(file);
+        Map<ClusterNode, Integer> nodeCtrs = new HashMap<>();
 
-                    jobs.put(job, node);
-                }
-            }
-        }
-        else {
-            Map<ClusterNode, Integer> nodeCtrs = new HashMap<>();
+        for (ClusterNode node : nodes)
+            nodeCtrs.put(node, 0);
 
-            for (ClusterNode node : nodes)
-                nodeCtrs.put(node, 0);
+        for (FileStatus file : files) {
+            ClusterNode node = nodeForFile(fs, file, nodes, nodeCtrs);
 
-            for (FileStatus file : files) {
-                ClusterNode node = nodeForFile(fs, file, nodes, nodeCtrs);
+            ComputeJob job = jobForFiles(file);
 
-                ComputeJob job = jobForFiles(file);
+            jobs.put(job, node);
 
-                jobs.put(job, node);
-
-                nodeCtrs.put(node, nodeCtrs.get(node) + 1);
-            }
+            nodeCtrs.put(node, nodeCtrs.get(node) + 1);
         }
 
         return jobs;
@@ -223,7 +211,7 @@ public class DirectOrcLoaderTask extends ComputeTaskAdapter<String, Integer> {
         for (int i = 0; i < files.length; i++)
             paths[i] = files[i].getPath().toString();
 
-        return new DirectOrcLoaderJob(paths, cacheName, bufSize, mode, skipCache);
+        return new DirectOrcLoaderJob(paths, cacheName, bufSize, parallelOps, mode);
     }
 
     /** {@inheritDoc} */

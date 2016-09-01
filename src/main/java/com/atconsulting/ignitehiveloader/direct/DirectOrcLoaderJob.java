@@ -1,24 +1,19 @@
 package com.atconsulting.ignitehiveloader.direct;
 
 import com.atconsulting.ignitehiveloader.CHA;
+import com.atconsulting.ignitehiveloader.OrcLoaderMode;
 import com.atconsulting.ignitehiveloader.OrcLoaderUtils;
 import org.apache.hadoop.hive.ql.io.orc.OrcStruct;
 import org.apache.hadoop.hive.ql.io.orc.Reader;
 import org.apache.hadoop.hive.ql.io.orc.RecordReader;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.ignite.Ignite;
-import org.apache.ignite.IgniteCache;
 import org.apache.ignite.IgniteDataStreamer;
 import org.apache.ignite.IgniteException;
-import org.apache.ignite.cache.affinity.Affinity;
-import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.compute.ComputeJob;
 import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.resources.IgniteInstanceResource;
-
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Ignite job to load a file into Ignite.
@@ -33,11 +28,11 @@ public class DirectOrcLoaderJob implements ComputeJob {
     /** Buffer size. */
     private int bufSize;
 
-    /** Load mode. */
-    private DirectOrcLoaderMode mode;
+    /** Parallel ops. */
+    private int parallelOps;
 
-    /** Skip cache flag. */
-    private boolean skipCache;
+    /** Load mode. */
+    private OrcLoaderMode mode;
 
     /** Injected Ignite instance. */
     @IgniteInstanceResource
@@ -57,16 +52,15 @@ public class DirectOrcLoaderJob implements ComputeJob {
      * @param paths Paths.
      * @param cacheName Cache name.
      * @param bufSize Buffer size.
+     * @param parallelOps Parallel operations.
      * @param mode Load mode.
-     * @param skipCache Skip cache flag.
      */
-    public DirectOrcLoaderJob(String[] paths, String cacheName, int bufSize, DirectOrcLoaderMode mode,
-        boolean skipCache) {
+    public DirectOrcLoaderJob(String[] paths, String cacheName, int bufSize, int parallelOps, OrcLoaderMode mode) {
         this.paths = paths;
         this.cacheName = cacheName;
         this.bufSize = bufSize;
+        this.parallelOps = parallelOps;
         this.mode = mode;
-        this.skipCache = skipCache;
     }
 
     /** {@inheritDoc} */
@@ -83,13 +77,13 @@ public class DirectOrcLoaderJob implements ComputeJob {
             StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
 
             switch (mode) {
-                case LOCAL_FILES:
-                    cnt += readAndLoad(reader, inspector);
+                case STREAMER:
+                    cnt += readAndLoad(reader, inspector, false);
 
                     break;
 
-                case LOCAL_KEYS:
-                    cnt += readAndLoadLocalKeys(reader, inspector);
+                case SKIP:
+                    cnt += readAndLoad(reader, inspector, true);
 
                     break;
 
@@ -108,13 +102,15 @@ public class DirectOrcLoaderJob implements ComputeJob {
      *
      * @param reader Reader.
      * @param inspector Inspector.
+     * @param skip Skip flag.
      * @return Amount of loaded key-value pairs.
      */
-    private long readAndLoad(Reader reader, StructObjectInspector inspector) {
+    private long readAndLoad(Reader reader, StructObjectInspector inspector, boolean skip) {
         long cnt = 0;
 
         try (IgniteDataStreamer<Object, CHA> streamer = ignite.dataStreamer(cacheName)) {
             streamer.perNodeBufferSize(bufSize);
+            streamer.perNodeParallelOperations(parallelOps);
 
             try {
                 RecordReader rows = reader.rows();
@@ -127,7 +123,7 @@ public class DirectOrcLoaderJob implements ComputeJob {
                     Object key = OrcLoaderUtils.structToKey(row, inspector);
                     CHA val = OrcLoaderUtils.structToValue(row, inspector);
 
-                    if (!skipCache)
+                    if (!skip)
                         streamer.addData(key, val);
 
                     cnt++;
@@ -136,63 +132,6 @@ public class DirectOrcLoaderJob implements ComputeJob {
             catch (Exception e) {
                 throw new IgniteException("Failed to load ORC data to cache.", e);
             }
-        }
-
-        return cnt;
-    }
-
-    /**
-     * Read and load only local keys.
-     *
-     * @param reader Reader.
-     * @param inspector Inspector.
-     * @return Amount of loaded key-value pairs.
-     */
-    private long readAndLoadLocalKeys(Reader reader, StructObjectInspector inspector) {
-        long cnt = 0;
-
-        IgniteCache<CHA.Key, CHA> cache = ignite.cache(cacheName);
-
-        Map<CHA.Key, CHA> buf = new HashMap<>(bufSize, 1.0f);
-
-        ClusterNode locNode = ignite.cluster().localNode();
-
-        Affinity<Long> aff = ignite.affinity(cacheName);
-
-        try {
-            RecordReader rows = reader.rows();
-
-            OrcStruct row = null;
-
-            while (rows.hasNext()) {
-                row = (OrcStruct)rows.next(row);
-
-                CHA.Key key = OrcLoaderUtils.structToKey(row, inspector);
-
-                if (!aff.isPrimary(locNode, key.getSubscriberId()))
-                    continue;
-
-                CHA val = OrcLoaderUtils.structToValue(row, inspector);
-
-                buf.put(key, val);
-
-                if (buf.size() == bufSize) {
-                    if (!skipCache)
-                        cache.putAll(buf);
-
-                    buf = new HashMap<>(bufSize, 1.0f);
-                }
-
-                cnt++;
-            }
-
-            if (buf.size() > 0) {
-                if (!skipCache)
-                    cache.putAll(buf);
-            }
-        }
-        catch (Exception e) {
-            throw new IgniteException("Failed to load ORC data to cache.", e);
         }
 
         return cnt;
