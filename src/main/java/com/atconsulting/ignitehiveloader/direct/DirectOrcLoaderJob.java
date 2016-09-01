@@ -314,7 +314,7 @@ public class DirectOrcLoaderJob implements ComputeJob {
 
             String path;
 
-            while ((path = pathsQueue.peek()) != null)
+            while ((path = pathsQueue.poll()) != null)
                 res0 += readAndLoadBatched(streamer, path);
 
             res.addAndGet(res0);
