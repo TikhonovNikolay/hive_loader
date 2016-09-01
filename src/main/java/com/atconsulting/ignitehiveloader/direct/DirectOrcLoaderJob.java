@@ -71,24 +71,31 @@ public class DirectOrcLoaderJob implements ComputeJob {
 
         long startTime = System.currentTimeMillis();
 
-        for (String path : paths) {
-            Reader reader = DirectOrcLoaderUtils.readerForPath(path);
+        try (IgniteDataStreamer<Object, CHA> streamer = ignite.dataStreamer(cacheName)) {
+            streamer.perNodeBufferSize(bufSize);
+            streamer.perNodeParallelOperations(parallelOps);
 
-            StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
+            for (String path : paths) {
+                Reader reader = DirectOrcLoaderUtils.readerForPath(path);
 
-            switch (mode) {
-                case STREAMER:
-                    cnt += readAndLoad(reader, inspector, false);
+                StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
 
-                    break;
+                switch (mode) {
+                    case STREAMER:
+                        cnt += readAndLoad(streamer, reader, inspector, false);
 
-                case SKIP:
-                    cnt += readAndLoad(reader, inspector, true);
+                        break;
 
-                    break;
+                    case SKIP:
+                        cnt += readAndLoad(streamer, reader, inspector, true);
 
-                default:
-                    throw new IgniteException("Unsupported mode: " + mode);
+                        break;
+
+                    default:
+                        throw new IgniteException("Unsupported mode: " + mode);
+                }
+
+                System.out.println(">>> Processed file: " + path);
             }
         }
 
@@ -100,38 +107,35 @@ public class DirectOrcLoaderJob implements ComputeJob {
     /**
      * Read and load keys optionally changing their affinity to match local node.
      *
+     * @param streamer Cache streamer.
      * @param reader Reader.
      * @param inspector Inspector.
      * @param skip Skip flag.
      * @return Amount of loaded key-value pairs.
      */
-    private long readAndLoad(Reader reader, StructObjectInspector inspector, boolean skip) {
+    private long readAndLoad(IgniteDataStreamer<Object, CHA> streamer, Reader reader, StructObjectInspector inspector,
+        boolean skip) {
         long cnt = 0;
 
-        try (IgniteDataStreamer<Object, CHA> streamer = ignite.dataStreamer(cacheName)) {
-            streamer.perNodeBufferSize(bufSize);
-            streamer.perNodeParallelOperations(parallelOps);
+        try {
+            RecordReader rows = reader.rows();
 
-            try {
-                RecordReader rows = reader.rows();
+            OrcStruct row = null;
 
-                OrcStruct row = null;
+            while (rows.hasNext()) {
+                row = (OrcStruct) rows.next(row);
 
-                while (rows.hasNext()) {
-                    row = (OrcStruct) rows.next(row);
+                Object key = OrcLoaderUtils.structToKey(row, inspector);
+                CHA val = OrcLoaderUtils.structToValue(row, inspector);
 
-                    Object key = OrcLoaderUtils.structToKey(row, inspector);
-                    CHA val = OrcLoaderUtils.structToValue(row, inspector);
+                if (!skip)
+                    streamer.addData(key, val);
 
-                    if (!skip)
-                        streamer.addData(key, val);
-
-                    cnt++;
-                }
+                cnt++;
             }
-            catch (Exception e) {
-                throw new IgniteException("Failed to load ORC data to cache.", e);
-            }
+        }
+        catch (Exception e) {
+            throw new IgniteException("Failed to load ORC data to cache.", e);
         }
 
         return cnt;
