@@ -28,23 +28,20 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
     /** Counter group. */
     private static final String CTR_GRP = "ignite";
 
+    /** Counter: start duration. */
+    private static final String CTR_START_DUR = "start.dur";
+
+    /** Counter: load count. */
+    private static final String CTR_LOAD_CNT = "load.cnt";
+
+    /** Counter: load duration. */
+    private static final String CTR_LOAD_DUR = "load.dur";
+
+    /** Counter: stop duration. */
+    private static final String CTR_STOP_DUR = "stop.dur";
+
     /** Counter: total duration. */
-    private static final String CTR_TOTAL_DUR = "dur.total";
-
-    /** Counter: setup duration. */
-    private static final String CTR_SETUP_DUR = "dur.setup";
-
-    /** Counter: cleanup duration. */
-    private static final String CTR_CLEANUP_DUR = "dur.cleanup";
-
-    /** Counter: map count. */
-    private static final String CTR_MAP_CNT = "cnt.map";
-
-    /** Counter: map duration in milliseconds. */
-    private static final String CTR_MAP_DUR = "dur.map";
-
-    /** Counter: streamer add duration.. */
-    private static final String CTR_ADD_DUR = "dur.add";
+    private static final String CTR_TOTAL_DUR = "total.dur";
 
     /** Mutex for synchronization. */
     private final Object mux = new Object();
@@ -95,16 +92,13 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
     private long startTime;
 
     /** Setup duration. */
-    private long ctrSetupDur;
+    private long ctrStartDur;
 
-    /** Counter: map duration. */
-    private long ctrMapDur;
+    /** Counter: load count. */
+    private long ctrLoadCnt;
 
-    /** Counter: map count. */
-    private long ctrMapCnt;
-
-    /** Counter: duration of streamer add operations. */
-    private long ctrAddDur;
+    /** Counter: load duration. */
+    private long ctrLoadDur;
 
     /** Amount of active operations. */
     private int curParallelOps;
@@ -164,7 +158,7 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
         totalParallelOps = ignite.cluster().forDataNodes(cacheName).nodes().size();
 
         // Log setup duration.
-        ctrSetupDur = System.nanoTime() - startTime;
+        ctrStartDur = System.nanoTime() - startTime;
     }
 
     /** {@inheritDoc} */
@@ -175,23 +169,18 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
         CHA.Key chaKey = OrcLoaderUtils.structToKey(struct, OrcLoaderUtils.inspector());
         CHA chaVal = OrcLoaderUtils.structToValue(struct, OrcLoaderUtils.inspector());
 
-        long addStartTime = System.nanoTime();
-
         boolean added = addData(chaKey, chaVal);
 
-        long mapStopTime = System.nanoTime();
-
         // Update counters.
-        ctrAddDur += mapStopTime - addStartTime;
-        ctrMapDur += mapStopTime - mapStartTime;
+        ctrLoadDur += System.nanoTime() - mapStartTime;
 
         if (added)
-            ctrMapCnt++;
+            ctrLoadCnt++;
     }
 
     /** {@inheritDoc} */
     @Override protected void cleanup(Context ctx) throws IOException, InterruptedException {
-        long cleanupStartTime = System.nanoTime();
+        long flushStartTime = System.nanoTime();
 
         if (mode == OrcLoaderMode.STREAMER || mode == OrcLoaderMode.STREAMER_BATCHED) {
             streamer.flush();
@@ -212,7 +201,7 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
             }
         }
 
-        ctrAddDur += System.nanoTime() - cleanupStartTime;
+        long flushStopTime = System.nanoTime();
 
         // Close the client node.
         if (ignite != null)
@@ -220,12 +209,13 @@ public class OrcLoaderMapper extends Mapper<NullWritable, OrcStruct,  NullWritab
 
         long stopTime = System.nanoTime();
 
-        counter(ctx, CTR_SETUP_DUR).setValue(ctrSetupDur / 1_000_000);
-        counter(ctx, CTR_CLEANUP_DUR).setValue((stopTime - cleanupStartTime) / 1_000_000);
-        counter(ctx, CTR_MAP_DUR).setValue(ctrMapDur / 1_000_000);
+        ctrLoadDur += flushStopTime - flushStartTime;
+
+        counter(ctx, CTR_START_DUR).setValue(ctrStartDur / 1_000_000);
+        counter(ctx, CTR_STOP_DUR).setValue((stopTime - flushStopTime) / 1_000_000);
         counter(ctx, CTR_TOTAL_DUR).setValue((stopTime - startTime) / 1_000_000);
-        counter(ctx, CTR_ADD_DUR).setValue(ctrAddDur / 1_000_000);
-        counter(ctx, CTR_MAP_CNT).setValue(ctrMapCnt);
+        counter(ctx, CTR_LOAD_DUR).setValue(ctrLoadDur / 1_000_000);
+        counter(ctx, CTR_LOAD_CNT).setValue(ctrLoadCnt);
     }
 
     /**
