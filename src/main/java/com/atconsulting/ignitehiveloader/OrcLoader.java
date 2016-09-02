@@ -26,7 +26,6 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.ignite.Ignite;
-import org.apache.ignite.IgniteDataStreamer;
 import org.apache.ignite.Ignition;
 
 /**
@@ -63,14 +62,14 @@ public class OrcLoader {
 
         String cacheName = conf.get(OrcLoaderProperties.CACHE_NAME);
 
-        conf.getEnum(OrcLoaderProperties.MODE, OrcLoaderMode.STREAMER);
+        conf.getEnum(OrcLoaderProperties.MODE, OrcLoaderProperties.DFLT_MODE);
 
-        int bufSize = conf.getInt(OrcLoaderProperties.BUFFER_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
+        int bufSize = conf.getInt(OrcLoaderProperties.BUFFER_SIZE, OrcLoaderProperties.DFLT_BUFFER_SIZE);
 
         if (bufSize <= 0)
             throw new IllegalArgumentException("Buffer size must be positive: " + bufSize);
 
-        int concurrency = conf.getInt(OrcLoaderProperties.PARALLEL_OPS, IgniteDataStreamer.DFLT_MAX_PARALLEL_OPS);
+        int concurrency = conf.getInt(OrcLoaderProperties.PARALLEL_OPS, OrcLoaderProperties.DFLT_PARALLEL_OPS);
 
         if (concurrency <= 0)
             throw new IllegalArgumentException("Parallel ops must be positive: " + concurrency);

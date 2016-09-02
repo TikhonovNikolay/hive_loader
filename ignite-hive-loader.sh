@@ -30,10 +30,6 @@ ${HADOOP_HOME}/bin/yarn jar ./target/ignite-hive-loader-1.0.0-SNAPSHOT.jar com.a
 -Dignite.orc.output=/tmp/ignite-hive-loader-out \
 -Dignite.orc.config_path=/mnt/nfsshare01/share/default-config.xml \
 -Dignite.orc.cache_name=mycache \
--Dignite.orc.clear_cache=false \
--Dignite.orc.buffer_size=1024 \
--Dignite.orc.parallel_ops=16 \
--Dignite.orc.mode=STREAMER \
 -Dignite.orc.ignite.orc.filter.current_day=false \
  "${@}"
 

@@ -1,5 +1,7 @@
 package com.atconsulting.ignitehiveloader;
 
+import org.apache.ignite.IgniteDataStreamer;
+
 /**
  * ORC loader properties.
  */
@@ -36,6 +38,18 @@ public class OrcLoaderProperties {
 
     /** How many threads process files and put data into batched streamer. */
     public static final String STREAMER_BATCHED_PARALLEL_OPS = "ignite.orc.streamer_batched_parallel_ops";
+
+    /** Default value for {@code MODE}. */
+    public static final OrcLoaderMode DFLT_MODE = OrcLoaderMode.STREAMER_BATCHED;
+
+    /** Default value for {@code BUFFER_SIZE}. */
+    public static final int DFLT_BUFFER_SIZE = IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE;
+
+    /** Default value for {@code PARALLEL_OPS}. */
+    public static final int DFLT_PARALLEL_OPS = IgniteDataStreamer.DFLT_MAX_PARALLEL_OPS;
+
+    /** Default value for {@code STREAMER_BATCHED_PARALLEL_OPS}. */
+    public static final int DFLT_STREAMER_BATCHED_PARALLEL_OPS = 4;
 
     /**
      * Constructor.

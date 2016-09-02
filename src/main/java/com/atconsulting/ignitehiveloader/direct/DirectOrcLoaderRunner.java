@@ -4,7 +4,6 @@ import com.atconsulting.ignitehiveloader.OrcLoaderMode;
 import com.atconsulting.ignitehiveloader.OrcLoaderProperties;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCompute;
-import org.apache.ignite.IgniteDataStreamer;
 import org.apache.ignite.Ignition;
 
 /**
@@ -27,18 +26,17 @@ public class DirectOrcLoaderRunner {
 
         String cacheName = System.getProperty(OrcLoaderProperties.CACHE_NAME);
 
-        int bufSize = Integer.getInteger(OrcLoaderProperties.BUFFER_SIZE, IgniteDataStreamer.DFLT_PER_NODE_BUFFER_SIZE);
+        int bufSize = Integer.getInteger(OrcLoaderProperties.BUFFER_SIZE, OrcLoaderProperties.DFLT_BUFFER_SIZE);
 
         if (bufSize <= 0)
             throw new IllegalArgumentException("Buffer size must be positive.");
 
-        int parallelOps = Integer.getInteger(OrcLoaderProperties.PARALLEL_OPS,
-            IgniteDataStreamer.DFLT_MAX_PARALLEL_OPS);
+        int parallelOps = Integer.getInteger(OrcLoaderProperties.PARALLEL_OPS, OrcLoaderProperties.DFLT_PARALLEL_OPS);
 
         if (parallelOps <= 0)
             throw new IllegalArgumentException("Parallel ops size must be positive.");
 
-        String modeStr = System.getProperty(OrcLoaderProperties.MODE, OrcLoaderMode.STREAMER_BATCHED.name());
+        String modeStr = System.getProperty(OrcLoaderProperties.MODE, OrcLoaderProperties.DFLT_MODE.name());
 
         if (modeStr == null)
             throw new IllegalArgumentException("Mode is not specified.");
@@ -48,7 +46,8 @@ public class DirectOrcLoaderRunner {
         if (mode == OrcLoaderMode.PUT)
             throw new IllegalArgumentException("Mode is not supported: " + mode);
 
-        int streamerBatchedParallelOps = Integer.getInteger(OrcLoaderProperties.STREAMER_BATCHED_PARALLEL_OPS, 1);
+        int streamerBatchedParallelOps = Integer.getInteger(OrcLoaderProperties.STREAMER_BATCHED_PARALLEL_OPS,
+            OrcLoaderProperties.DFLT_STREAMER_BATCHED_PARALLEL_OPS);
 
         if (streamerBatchedParallelOps < 1)
             streamerBatchedParallelOps = 1;
