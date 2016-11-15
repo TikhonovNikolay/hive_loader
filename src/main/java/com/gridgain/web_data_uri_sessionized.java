@@ -57,7 +57,7 @@ public class web_data_uri_sessionized {
     private String request;
 
     @Order(8)
-    @QuerySqlField
+    @QuerySqlField(index = true)
     private String useragent;
 
     @Order(9)
@@ -69,7 +69,7 @@ public class web_data_uri_sessionized {
     private String xff;
 
     @Order(11)
-    @QuerySqlField
+    @QuerySqlField(index = true)
     private String calltype;
 
     @Order(12)
@@ -89,7 +89,7 @@ public class web_data_uri_sessionized {
     private String referrer_url;
 
     @Order(16)
-    @QuerySqlField
+    @QuerySqlField(index = true)
     private String session_id;
 
     @Order(17)
@@ -97,7 +97,7 @@ public class web_data_uri_sessionized {
     private String source;
 
     @Order(18)
-    @QuerySqlField
+    @QuerySqlField(index = true)
     private String dwelltime;
 
     @Order(19)

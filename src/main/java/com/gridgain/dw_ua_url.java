@@ -37,7 +37,7 @@ public class dw_ua_url {
     private String area_level3;
 
     @Order(3)
-    @QuerySqlField
+    @QuerySqlField(index = true)
     private String area_level4;
 
     @Order(4)
