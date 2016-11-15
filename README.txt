@@ -1,26 +1,4 @@
-Running ORC loader with Hadoop
-----------------------------------------
-1. Build the project with Maven: "mvn clean package".
-
-2. Specify HADOOP_HOME, HIVE_HOME, IGNITE_HOME in script "ignite-hive-loader.sh" (Hadoop cluster assumed to be
-configured, up and running).
-
-3. Ensure that loader properties are set correctly:
--Dignite.orc.input - folder in HDFS with Hive table;
--Dignite.orc.output - output folder; not really needed for load itself , but required by Hadoop;
--Dignite.orc.config_path - path to Ignite XML configuration;
--Dignite.orc.cache_name - cache name;
--Dignite.orc.clear_cache - whether to clear cache before starting load; used for debugging;
--Dignite.orc.buffer_size=1024 - load buffer size (how many entries are loaded at once);
--Dignite.orc.parallel_ops=16 - parallel operations per node;
--Dignite.orc.mode - load mode (use STREAMER for normal load, or SKIP to measure time of Hadoop
-    infrastructure + ORC parsing);
--Dignite.orc.ignite.orc.filter.current_day - set to "true" to load data only for the current day.
-
-4. Run loader:
-   ./ignite-hive-loader.sh
-
-Running ORC loader with Ignite
+Running TEXT loader with Ignite
 ----------------------------------------
 This mode require you to have an Ignite client started on each HDFS data node.
 
@@ -57,6 +35,19 @@ distribution, and the deliver it to all HDFS machines.
    several client nodes.
 
 8. Review "direct-hive-loader.sh" file and set correct HADOOP_HOME and IGNITE_HOME directories there.
-9. Run loader passing require arguments to it. E.g.:
+9. Change in "ignite-base-config.xml" path in hdfs to source data for all table on correct values. For example:
 
-./direct.sh -Dignite.orc.input=hdfs://testagent06:9000/user/hive/warehouse/cha_min_orc_10g -Dignite.orc.config_path=/opt/1964/gridgain-professional-fabric-1.6.5/config/default-config.xml -Dignite.orc.cache_name=mycache --Dignite.orc.ignite.orc.filter.current_day=true
+    <util:list id="externalSource" value-type="com.gridgain.ImportDataSource">
+        <bean class="com.gridgain.ImportDataSource">
+            <!-- Need to change on correct value -->
+            <property name="path" value="hdfs://localhost:9000/data/cpr_user_info_vw"/>
+            <property name="clazz" value="com.gridgain.cpr_user_info_vw"/>
+        </bean>
+
+        ...
+
+    </util:list>
+
+10. Run loader passing require arguments to it. E.g.:
+
+./run-direct.sh -Dignite.config_path=/opt/1964/gridgain-professional-fabric-1.6.5/config/ignite-multicast-config.xml

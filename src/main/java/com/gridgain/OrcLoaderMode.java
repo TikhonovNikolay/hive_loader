@@ -1,4 +1,4 @@
-package com.atconsulting.ignitehiveloader;
+package com.gridgain;
 
 /**
  * Loader modes enumeration.

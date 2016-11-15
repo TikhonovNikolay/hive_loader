@@ -19,4 +19,4 @@ IGNITE_HOME=${IGNITE_HOME:-.../apache-ignite-fabric-1.7.0-SNAPSHOT-bin}
 #CP=${IGNITE_HOME}/libs/*:${IGNITE_HOME}/libs/ignite-spring/*:${IGNITE_HOME}/libs/optional/ignite-log4j/*:${HIVE_HOME}/lib/*
 CP="/mnt/nfsshare01/share/lib-share/*:${HADOOP_HOME}/share/hadoop/hdfs/*"
 
-java -cp target/ignite-hive-loader-1.0.0-SNAPSHOT.jar:${CP} "${@}" com.atconsulting.ignitehiveloader.direct.DirectOrcLoaderRunner
+java -cp target/ignite-hive-loader-1.0.0-SNAPSHOT.jar:${CP} "${@}" com.gridgain.direct.DirectLoaderRunner

@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!--
+    Ignite Spring configuration file to startup grid.
+-->
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:util="http://www.springframework.org/schema/util"
+       xsi:schemaLocation="
+        http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.5.xsd
+        http://www.springframework.org/schema/util
+        http://www.springframework.org/schema/util/spring-util-2.5.xsd">
+
+    <util:list id="externalSource" value-type="com.gridgain.ImportDataSource">
+        <bean class="com.gridgain.ImportDataSource">
+            <property name="path" value="hdfs://localhost:9000/data/cpr_user_info_vw"/>
+            <property name="clazz" value="com.gridgain.cpr_user_info_vw"/>
+        </bean>
+        <bean class="com.gridgain.ImportDataSource">
+            <property name="path" value="hdfs://localhost:9000/data/ds2_brm_master"/>
+            <property name="clazz" value="com.gridgain.ds2_brm_master"/>
+        </bean>
+        <bean class="com.gridgain.ImportDataSource">
+            <property name="path" value="hdfs://localhost:9000/data/dw_ua_url"/>
+            <property name="clazz" value="com.gridgain.dw_ua_url"/>
+        </bean>
+        <bean class="com.gridgain.ImportDataSource">
+            <property name="path" value="hdfs://localhost:9000/data/ua_parsed_attrs"/>
+            <property name="clazz" value="com.gridgain.ua_parsed_attrs"/>
+            <property name="delimiter" value="\t"/>
+        </bean>
+        <bean class="com.gridgain.ImportDataSource">
+            <property name="path" value="hdfs://localhost:9000/data/unqvstr_rvrs_ip_rep"/>
+            <property name="clazz" value="com.gridgain.unqvstr_rvrs_ip_rep"/>
+        </bean>
+        <bean class="com.gridgain.ImportDataSource">
+            <property name="path" value="hdfs://localhost:9000/data/wbx_telephony_participant_f"/>
+            <property name="clazz" value="com.gridgain.wbx_telephony_participant_f"/>
+        </bean>
+        <bean class="com.gridgain.ImportDataSource">
+            <property name="path" value="hdfs://localhost:9000/data/web_data_uri_sessionized_2"/>
+            <property name="clazz" value="com.gridgain.web_data_uri_sessionized"/>
+        </bean>
+        <bean class="com.gridgain.ImportDataSource">
+            <property name="path" value="hdfs://localhost:9000/data/XXRPT_HGSMEETINGREPORT"/>
+            <property name="clazz" value="com.gridgain.XXRPT_HGSMEETINGREPORT"/>
+        </bean>
+        <bean class="com.gridgain.ImportDataSource">
+            <property name="path" value="hdfs://localhost:9000/data/XXRPT_HGSMEETINGUSERREPORT"/>
+            <property name="clazz" value="com.gridgain.XXRPT_HGSMEETINGUSERREPORT"/>
+        </bean>
+    </util:list>
+
+    <bean id="base-ignite.cfg" class="org.apache.ignite.configuration.IgniteConfiguration" abstract="true">
+        <property name="peerClassLoadingEnabled" value="false"/>
+
+        <property name="metricsLogFrequency" value="5000"/>
+
+        <property name="cacheConfiguration">
+            <list>
+                <bean class="org.apache.ignite.configuration.CacheConfiguration">
+                    <property name="name" value="cpr_user_info_vw"/>
+
+                    <property name="cacheMode" value="PARTITIONED"/>
+
+                    <property name="atomicityMode" value="ATOMIC"/>
+
+                    <property name="swapEnabled" value="false"/>
+
+                    <property name="memoryMode" value="ONHEAP_TIERED"/>
+
+                    <property name="indexedTypes">
+                        <list>
+                            <value>java.lang.Integer</value>
+                            <value>com.gridgain.cpr_user_info_vw</value>
+                        </list>
+                    </property>
+                </bean>
+
+                <bean class="org.apache.ignite.configuration.CacheConfiguration">
+                    <property name="name" value="ds2_brm_master"/>
+
+                    <property name="cacheMode" value="PARTITIONED"/>
+
+                    <property name="atomicityMode" value="ATOMIC"/>
+
+                    <property name="swapEnabled" value="false"/>
+
+                    <property name="memoryMode" value="ONHEAP_TIERED"/>
+
+                    <property name="indexedTypes">
+                        <list>
+                            <value>java.lang.Integer</value>
+                            <value>com.gridgain.ds2_brm_master</value>
+                        </list>
+                    </property>
+                </bean>
+
+                <bean class="org.apache.ignite.configuration.CacheConfiguration">
+                    <property name="name" value="ua_parsed_attrs"/>
+
+                    <property name="cacheMode" value="PARTITIONED"/>
+
+                    <property name="atomicityMode" value="ATOMIC"/>
+
+                    <property name="swapEnabled" value="false"/>
+
+                    <property name="memoryMode" value="ONHEAP_TIERED"/>
+
+                    <property name="indexedTypes">
+                        <list>
+                            <value>java.lang.Integer</value>
+                            <value>com.gridgain.ua_parsed_attrs</value>
+                        </list>
+                    </property>
+                </bean>
+
+                <bean class="org.apache.ignite.configuration.CacheConfiguration">
+                    <property name="name" value="dw_ua_url"/>
+
+                    <property name="cacheMode" value="PARTITIONED"/>
+
+                    <property name="atomicityMode" value="ATOMIC"/>
+
+                    <property name="swapEnabled" value="false"/>
+
+                    <property name="memoryMode" value="ONHEAP_TIERED"/>
+
+                    <property name="indexedTypes">
+                        <list>
+                            <value>java.lang.Integer</value>
+                            <value>com.gridgain.dw_ua_url</value>
+                        </list>
+                    </property>
+                </bean>
+
+                <bean class="org.apache.ignite.configuration.CacheConfiguration">
+                    <property name="name" value="unqvstr_rvrs_ip_rep"/>
+
+                    <property name="cacheMode" value="PARTITIONED"/>
+
+                    <property name="atomicityMode" value="ATOMIC"/>
+
+                    <property name="swapEnabled" value="false"/>
+
+                    <property name="memoryMode" value="ONHEAP_TIERED"/>
+
+                    <property name="indexedTypes">
+                        <list>
+                            <value>java.lang.Integer</value>
+                            <value>com.gridgain.unqvstr_rvrs_ip_rep</value>
+                        </list>
+                    </property>
+                </bean>
+
+                <bean class="org.apache.ignite.configuration.CacheConfiguration">
+                    <property name="name" value="wbx_telephony_participant_f"/>
+
+                    <property name="cacheMode" value="PARTITIONED"/>
+
+                    <property name="atomicityMode" value="ATOMIC"/>
+
+                    <property name="swapEnabled" value="false"/>
+
+                    <property name="memoryMode" value="ONHEAP_TIERED"/>
+
+                    <property name="indexedTypes">
+                        <list>
+                            <value>java.lang.Integer</value>
+                            <value>com.gridgain.wbx_telephony_participant_f</value>
+                        </list>
+                    </property>
+                </bean>
+
+                <bean class="org.apache.ignite.configuration.CacheConfiguration">
+                    <property name="name" value="web_data_uri_sessionized"/>
+
+                    <property name="cacheMode" value="PARTITIONED"/>
+
+                    <property name="atomicityMode" value="ATOMIC"/>
+
+                    <property name="swapEnabled" value="false"/>
+
+                    <property name="memoryMode" value="ONHEAP_TIERED"/>
+
+                    <property name="indexedTypes">
+                        <list>
+                            <value>java.lang.Integer</value>
+                            <value>com.gridgain.web_data_uri_sessionized</value>
+                        </list>
+                    </property>
+                </bean>
+
+                <bean class="org.apache.ignite.configuration.CacheConfiguration">
+                    <property name="name" value="XXRPT_HGSMEETINGREPORT"/>
+
+                    <property name="cacheMode" value="PARTITIONED"/>
+
+                    <property name="atomicityMode" value="ATOMIC"/>
+
+                    <property name="swapEnabled" value="false"/>
+
+                    <property name="memoryMode" value="ONHEAP_TIERED"/>
+
+                    <property name="indexedTypes">
+                        <list>
+                            <value>java.lang.Integer</value>
+                            <value>com.gridgain.XXRPT_HGSMEETINGREPORT</value>
+                        </list>
+                    </property>
+                </bean>
+                <bean class="org.apache.ignite.configuration.CacheConfiguration">
+                    <property name="name" value="XXRPT_HGSMEETINGUSERREPORT"/>
+
+                    <property name="cacheMode" value="PARTITIONED"/>
+
+                    <property name="atomicityMode" value="ATOMIC"/>
+
+                    <property name="swapEnabled" value="false"/>
+
+                    <property name="memoryMode" value="ONHEAP_TIERED"/>
+
+                    <property name="indexedTypes">
+                        <list>
+                            <value>java.lang.Integer</value>
+                            <value>com.gridgain.XXRPT_HGSMEETINGUSERREPORT</value>
+                        </list>
+                    </property>
+                </bean>
+            </list>
+        </property>
+    </bean>
+</beans>

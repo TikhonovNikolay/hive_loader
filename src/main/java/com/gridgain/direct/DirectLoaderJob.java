@@ -1,9 +1,23 @@
-package com.cisco.direct;
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-import com.atconsulting.ignitehiveloader.CHA;
-import com.atconsulting.ignitehiveloader.OrcLoaderMode;
-import com.atconsulting.ignitehiveloader.OrcLoaderUtils;
-import com.atconsulting.ignitehiveloader.filter.OrcLoaderFilter;
+package com.gridgain.direct;
+
+import com.gridgain.dw_ua_url;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -11,10 +25,6 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
-import org.apache.hadoop.hive.ql.io.orc.OrcStruct;
-import org.apache.hadoop.hive.ql.io.orc.Reader;
-import org.apache.hadoop.hive.ql.io.orc.RecordReader;
-import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteDataStreamer;
 import org.apache.ignite.IgniteException;
@@ -22,6 +32,7 @@ import org.apache.ignite.compute.ComputeJob;
 import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.lang.IgniteBiTuple;
+import org.apache.ignite.lang.IgniteUuid;
 import org.apache.ignite.resources.IgniteInstanceResource;
 
 /**
@@ -31,8 +42,11 @@ public class DirectLoaderJob implements ComputeJob {
     /** File paths. */
     private String[] paths;
 
-    /** Cache name. */
-    private String cacheName;
+    /** Class. */
+    private Class clazz;
+
+    /** Delimiter. */
+    private String delimiter;
 
     /** Buffer size. */
     private int bufSize;
@@ -40,14 +54,8 @@ public class DirectLoaderJob implements ComputeJob {
     /** Parallel ops. */
     private int parallelOps;
 
-    /** Load mode. */
-    private OrcLoaderMode mode;
-
-    /** Number of parallel operations for batched streamer.   */
+    /** Number of parallel operations for batched streamer. */
     private int streamerBatchedParallelOps;
-
-    /** Optional filter. */
-    private OrcLoaderFilter filter;
 
     /** Injected Ignite instance. */
     @IgniteInstanceResource
@@ -65,55 +73,33 @@ public class DirectLoaderJob implements ComputeJob {
      * Constructor.
      *
      * @param paths Paths.
-     * @param cacheName Cache name.
+     * @param clazz Class.
      * @param bufSize Buffer size.
      * @param parallelOps Parallel operations.
-     * @param mode Load mode.
-     * @param filter Optional filter.
      */
-    public DirectLoaderJob(String[] paths, String cacheName, int bufSize, int parallelOps, OrcLoaderMode mode,
-        int streamerBatchedParallelOps, OrcLoaderFilter filter) {
+    public DirectLoaderJob(String[] paths,
+        Class clazz,
+        String delimiter,
+        int bufSize,
+        int parallelOps,
+        int streamerBatchedParallelOps) {
         this.paths = paths;
-        this.cacheName = cacheName;
+        this.clazz = clazz;
+        this.delimiter = delimiter;
         this.bufSize = bufSize;
         this.parallelOps = parallelOps;
-        this.mode = mode;
         this.streamerBatchedParallelOps = streamerBatchedParallelOps;
-        this.filter = filter;
     }
 
     /** {@inheritDoc} */
     @Override public Object execute() throws IgniteException {
-        System.out.println(">>> Starting ORC job: " + this);
+        System.out.println(">>> Starting job: " + this);
 
-        long cnt = 0;
+        long cnt;
 
         long startTime = System.currentTimeMillis();
 
-        if (mode == OrcLoaderMode.STREAMER_BATCHED)
-            cnt = readAndLoadBatched();
-        else {
-            try (IgniteDataStreamer<CHA.Key, CHA> streamer = createStreamer()) {
-                for (String path : paths) {
-                    switch (mode) {
-                        case SKIP:
-                            cnt += readAndLoad(streamer, path, true);
-
-                            break;
-
-                        case STREAMER:
-                            cnt += readAndLoad(streamer, path, false);
-
-                            break;
-
-                        default:
-                            throw new IgniteException("Unsupported mode: " + mode);
-                    }
-
-                    System.out.println(">>> Processed file: " + path);
-                }
-            }
-        }
+        cnt = readAndLoadBatched();
 
         long dur = (System.currentTimeMillis() - startTime) / 1_000_000;
 
@@ -129,7 +115,7 @@ public class DirectLoaderJob implements ComputeJob {
     private long readAndLoadBatched() {
         AtomicLong res = new AtomicLong();
 
-        try (IgniteDataStreamer<CHA.Key, CHA> streamer = createStreamer()) {
+        try (IgniteDataStreamer<IgniteUuid, Object> streamer = createStreamer()) {
             // Create queue with tasks.
             ConcurrentLinkedQueue<String> pathsQueue = new ConcurrentLinkedQueue<>();
 
@@ -168,90 +154,39 @@ public class DirectLoaderJob implements ComputeJob {
     /**
      * Read and load keys batching them into separate buffer before passing to streamer.
      *
-     * @param streamer Cache streamer.
+     * @param strm Cache streamer.
      * @param path Path to file.
      * @return Amount of loaded key-value pairs.
      */
-    private long readAndLoadBatched(IgniteDataStreamer<CHA.Key, CHA> streamer, String path) {
-        Reader reader = DirectLoaderUtils.readerForPath(path);
-
-        StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
+    private long readAndLoadBatched(IgniteDataStreamer<IgniteUuid, Object> strm, String path) {
+        CsvImporter importer = new CsvImporter(path, clazz, delimiter);
 
         long cnt = 0;
 
-        List<Map.Entry<CHA.Key, CHA>> buf = new ArrayList<>(bufSize);
+        List<Map.Entry<IgniteUuid, Object>> buf = new ArrayList<>(bufSize);
 
         try {
-            RecordReader rows = reader.rows();
+            Object o;
 
-            OrcStruct row = null;
+            while ((o = importer.readObject()) != null) {
+                IgniteUuid key = IgniteUuid.randomUuid();
 
-            while (rows.hasNext()) {
-                row = (OrcStruct) rows.next(row);
+                buf.add(new IgniteBiTuple<>(key, o));
 
-                CHA.Key key = OrcLoaderUtils.structToKey(row, inspector);
-                CHA val = OrcLoaderUtils.structToValue(row, inspector);
+                if (buf.size() == bufSize) {
+                    strm.addData(buf);
 
-                if (filter == null || filter.evaluate(key, val)) {
-                    buf.add(new IgniteBiTuple<>(key, val));
-
-                    if (buf.size() == bufSize) {
-                        streamer.addData(buf);
-
-                        buf = new ArrayList<>(bufSize);
-                    }
-
-                    cnt++;
+                    buf = new ArrayList<>(bufSize);
                 }
+
+                cnt++;
             }
 
             if (!buf.isEmpty())
-                streamer.addData(buf);
+                strm.addData(buf);
         }
         catch (Exception e) {
-            throw new IgniteException("Failed to load ORC data to cache.", e);
-        }
-
-        return cnt;
-    }
-
-    /**
-     * Read and load keys.
-     *
-     * @param streamer Cache streamer.
-     * @param path Path to file.
-     * @param skip Skip flag.
-     * @return Amount of loaded key-value pairs.
-     */
-    private long readAndLoad(IgniteDataStreamer<CHA.Key, CHA> streamer, String path,
-        boolean skip) {
-        Reader reader = DirectLoaderUtils.readerForPath(path);
-
-        StructObjectInspector inspector = (StructObjectInspector)reader.getObjectInspector();
-
-        long cnt = 0;
-
-        try {
-            RecordReader rows = reader.rows();
-
-            OrcStruct row = null;
-
-            while (rows.hasNext()) {
-                row = (OrcStruct) rows.next(row);
-
-                CHA.Key key = OrcLoaderUtils.structToKey(row, inspector);
-                CHA val = OrcLoaderUtils.structToValue(row, inspector);
-
-                if (filter == null || filter.evaluate(key, val)) {
-                    if (!skip)
-                        streamer.addData(key, val);
-
-                    cnt++;
-                }
-            }
-        }
-        catch (Exception e) {
-            throw new IgniteException("Failed to load ORC data to cache.", e);
+            throw new IgniteException("Failed to load data to cache: " + clazz, e);
         }
 
         return cnt;
@@ -262,8 +197,8 @@ public class DirectLoaderJob implements ComputeJob {
      *
      * @return Streamer.
      */
-    private IgniteDataStreamer<CHA.Key, CHA> createStreamer() {
-        IgniteDataStreamer<CHA.Key, CHA> streamer = ignite.dataStreamer(cacheName);
+    private IgniteDataStreamer<IgniteUuid, Object> createStreamer() {
+        IgniteDataStreamer<IgniteUuid, Object> streamer = ignite.dataStreamer(clazz.getSimpleName());
 
         streamer.perNodeBufferSize(bufSize);
         streamer.perNodeParallelOperations(parallelOps);
@@ -286,7 +221,7 @@ public class DirectLoaderJob implements ComputeJob {
      */
     private class BatchLoadTask implements Runnable {
         /** Streamer. */
-        private final IgniteDataStreamer<CHA.Key, CHA> streamer;
+        private final IgniteDataStreamer<IgniteUuid, Object> streamer;
 
         /** Path to process. */
         private final Queue<String> pathsQueue;
@@ -301,7 +236,7 @@ public class DirectLoaderJob implements ComputeJob {
          * @param pathsQueue Paths to process.
          * @param res Result holder.
          */
-        BatchLoadTask(IgniteDataStreamer<CHA.Key, CHA> streamer, Queue<String> pathsQueue, AtomicLong res) {
+        BatchLoadTask(IgniteDataStreamer<IgniteUuid, Object> streamer, Queue<String> pathsQueue, AtomicLong res) {
             this.streamer = streamer;
             this.pathsQueue = pathsQueue;
             this.res = res;

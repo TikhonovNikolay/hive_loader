@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.cisco;
+package com.gridgain;
 
 import java.util.Date;
 import org.apache.ignite.cache.query.annotations.QuerySqlField;
@@ -75,149 +75,145 @@ public class wbx_telephony_participant_f {
 
     @Order(12)
     @QuerySqlField
-    private String phone_number;
+    private Date call_start_dtm;
 
     @Order(13)
     @QuerySqlField
-    private Date call_start_dtm;
+    private Date call_end_dtm;
 
     @Order(14)
     @QuerySqlField
-    private Date call_end_dtm;
+    private Double call_duration_minutes;
 
     @Order(15)
     @QuerySqlField
-    private Double call_duration_minutes;
+    private String call_type;
 
     @Order(16)
     @QuerySqlField
-    private String call_type;
+    private String telephony_server;
 
     @Order(17)
     @QuerySqlField
-    private String telephony_server;
+    private String call_service_type;
 
     @Order(18)
     @QuerySqlField
-    private String call_service_type;
+    private String meeting_type;
 
     @Order(19)
     @QuerySqlField
-    private String meeting_type;
+    private String session_type;
 
     @Order(20)
     @QuerySqlField
-    private String session_type;
+    private String major_session_type;
 
     @Order(21)
     @QuerySqlField
-    private String major_session_type;
+    private Date telephony_creation_date;
 
     @Order(22)
     @QuerySqlField
-    private Date telephony_creation_date;
+    private Date consumption_date;
 
     @Order(23)
     @QuerySqlField
-    private Date consumption_date;
+    private Long call_rate_id;
 
     @Order(24)
     @QuerySqlField
-    private Long call_rate_id;
+    private Double wbx_price;
 
     @Order(25)
     @QuerySqlField
-    private Double wbx_price;
+    private Double rating_billing_status;
 
     @Order(26)
     @QuerySqlField
-    private Double rating_billing_status;
+    private Date rating_billing_dtm;
 
     @Order(27)
     @QuerySqlField
-    private Date rating_billing_dtm;
+    private Date meeting_start_time_dtm;
 
     @Order(28)
     @QuerySqlField
-    private Date meeting_start_time_dtm;
+    private Date meeting_end_time_dtm;
 
     @Order(29)
     @QuerySqlField
-    private Date meeting_end_time_dtm;
+    private String did_phone_number;
 
     @Order(30)
     @QuerySqlField
-    private String did_phone_number;
+    private String provider;
 
     @Order(31)
     @QuerySqlField
-    private String provider;
+    private String provider_country;
 
     @Order(32)
     @QuerySqlField
-    private String provider_country;
+    private String user_email;
 
     @Order(33)
     @QuerySqlField
-    private String user_email;
+    private String user_name;
 
     @Order(34)
     @QuerySqlField
-    private String user_name;
+    private String webexid;
 
     @Order(35)
     @QuerySqlField
-    private String webexid;
+    private String did_country;
 
     @Order(36)
     @QuerySqlField
-    private String did_country;
+    private String bridge_country;
 
     @Order(37)
     @QuerySqlField
-    private String bridge_country;
+    private String country_code;
 
     @Order(38)
     @QuerySqlField
-    private String country_code;
+    private String toll_type;
 
     @Order(39)
     @QuerySqlField
-    private String toll_type;
+    private String area_code;
 
     @Order(40)
     @QuerySqlField
-    private String area_code;
+    private String dnis;
 
     @Order(41)
     @QuerySqlField
-    private String dnis;
+    private String ani;
 
     @Order(42)
     @QuerySqlField
-    private String ani;
+    private String billable_flag;
 
     @Order(43)
     @QuerySqlField
-    private String billable_flag;
+    private String usage_type;
 
     @Order(44)
     @QuerySqlField
-    private String usage_type;
+    private Date edw_create_dtm;
 
     @Order(45)
     @QuerySqlField
-    private Date edw_create_dtm;
+    private String edw_create_user;
 
     @Order(46)
     @QuerySqlField
-    private String edw_create_user;
-
-    @Order(47)
-    @QuerySqlField
     private Date edw_update_dtm;
 
-    @Order(48)
+    @Order(47)
     @QuerySqlField
     private String edw_update_user;
 
@@ -318,14 +314,6 @@ public class wbx_telephony_participant_f {
 
     public void setUser_id(String user_id) {
         this.user_id = user_id;
-    }
-
-    public String getPhone_number() {
-        return phone_number;
-    }
-
-    public void setPhone_number(String phone_number) {
-        this.phone_number = phone_number;
     }
 
     public Date getCall_start_dtm() {

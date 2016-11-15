@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.cisco;
+package com.gridgain;
 
 import org.apache.ignite.cache.query.annotations.QuerySqlField;
 import org.springframework.core.annotation.Order;

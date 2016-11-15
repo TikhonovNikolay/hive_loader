@@ -1,11 +1,25 @@
-package com.cisco.direct;
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-import com.atconsulting.ignitehiveloader.OrcLoaderMode;
-import com.atconsulting.ignitehiveloader.filter.OrcLoaderSameDayFilter;
+package com.gridgain.direct;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -25,14 +39,14 @@ import org.apache.ignite.internal.util.typedef.internal.S;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Ignite job to load ORC files from the given directory into Ignite.
+ * Ignite job to load files from the given directory into Ignite.
  */
 public class DirectLoaderTask extends ComputeTaskAdapter<String, Integer> {
-    /** Path to ORC files. */
+    /** Path to files. */
     private final String pathStr;
 
     /** Cache name. */
-    private final String cacheName;
+    private final Class clazz;
 
     /** Buffer size. */
     private final int bufSize;
@@ -40,17 +54,14 @@ public class DirectLoaderTask extends ComputeTaskAdapter<String, Integer> {
     /** Parallel operations. */
     private final int parallelOps;
 
-    /** Load mode. */
-    private final OrcLoaderMode mode;
-
-    /** Number of parallel operations for batched streamer.   */
+    /** Number of parallel operations for batched streamer. */
     private final int streamerBatchedParallelOps;
 
     /** Whether single job should be created for a file. */
     private final boolean jobPerFile;
 
-    /** Whether to load current day only. */
-    private final boolean filterCurDay;
+    /** File delimiter. */
+    private final String delimiter;
 
     /** Local node. */
     @GridToStringExclude
@@ -59,26 +70,29 @@ public class DirectLoaderTask extends ComputeTaskAdapter<String, Integer> {
     /**
      * Constructor.
      *
-     * @param pathStr Path to ORC files.
-     * @param cacheName Cache name.
+     * @param pathStr Path to files.
+     * @param clazz Class.
      * @param bufSize Buffer size.
      * @param parallelOps Parallel operations.
-     * @param mode Load mode.
      * @param streamerBatchedParallelOps Number of parallel operations for batched streamer.
      * @param jobPerFile Whether single job should be created for a file.
-     * @param filterCurDay Whether to load current day only.
      * @param locNode Local node.
      */
-    public DirectLoaderTask(String pathStr, String cacheName, int bufSize, int parallelOps, OrcLoaderMode mode,
-        int streamerBatchedParallelOps, boolean jobPerFile, boolean filterCurDay, ClusterNode locNode) {
+    public DirectLoaderTask(String pathStr,
+        Class clazz,
+        String delimiter,
+        int bufSize,
+        int parallelOps,
+        int streamerBatchedParallelOps,
+        boolean jobPerFile,
+        ClusterNode locNode) {
+        this.delimiter = delimiter;
         this.pathStr = pathStr;
-        this.cacheName = cacheName;
+        this.clazz = clazz;
         this.bufSize = bufSize;
         this.parallelOps = parallelOps;
-        this.mode = mode;
         this.streamerBatchedParallelOps = streamerBatchedParallelOps;
         this.jobPerFile = jobPerFile;
-        this.filterCurDay = filterCurDay;
         this.locNode = locNode;
     }
 
@@ -90,7 +104,7 @@ public class DirectLoaderTask extends ComputeTaskAdapter<String, Integer> {
         List<ClusterNode> nodes0 = new ArrayList<>(nodes.size() - 1);
 
         for (ClusterNode node : nodes) {
-            if (!F.eq(node.id(), locNode.id()))
+            //if (!F.eq(node.id(), locNode.id()))
                 nodes0.add(node);
         }
 
@@ -270,8 +284,7 @@ public class DirectLoaderTask extends ComputeTaskAdapter<String, Integer> {
         for (int i = 0; i < files.size(); i++)
             paths[i] = files.get(i).getPath().toString();
 
-        return new DirectLoaderJob(paths, cacheName, bufSize, parallelOps, mode, streamerBatchedParallelOps,
-            filterCurDay ? new OrcLoaderSameDayFilter(new Date()) : null);
+        return new DirectLoaderJob(paths, clazz, delimiter, bufSize, parallelOps, streamerBatchedParallelOps);
     }
 
     /** {@inheritDoc} */
